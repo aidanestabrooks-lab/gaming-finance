@@ -1,0 +1,265 @@
+---
+/**
+ * Three-player, multi-round dynamic game of semiconductor export controls.
+ * The full extensive form is generated procedurally from a state vector and
+ * solved by backward induction (subgame-perfect equilibrium). Up to 18^R
+ * terminal histories; R = 4 is about 105,000 leaves and solves in well under
+ * a second. A parameter sweep re-solves the game on a grid and maps which
+ * opening move the United States chooses.
+ */
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+}
+const { id, title = 'Export-control game: generate, solve, sweep', note } = Astro.props;
+---
+
+<div class="model" data-model="dyn" id={id}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    {note && <p class="model-note">{note}</p>}
+  </div>
+  <div class="controls">
+    <label class="ctl">
+      <span class="lab"><span>Rounds (R)</span><output data-o="R">3</output></span>
+      <input type="range" min="1" max="4" step="1" value="3" data-in="R" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Control effectiveness (α)</span><output data-o="alpha">1.00</output></span>
+      <input type="range" min="0.2" max="2" step="0.05" value="1" data-in="alpha" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>US escalation cost (c<sub>US</sub>)</span><output data-o="cus">0.30</output></span>
+      <input type="range" min="0" max="1" step="0.02" value="0.3" data-in="cus" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>China escalation cost (c<sub>CN</sub>)</span><output data-o="ccn">0.40</output></span>
+      <input type="range" min="0" max="1" step="0.02" value="0.4" data-in="ccn" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Indigenization speed (γ)</span><output data-o="gamma">0.15</output></span>
+      <input type="range" min="0.02" max="0.5" step="0.01" value="0.15" data-in="gamma" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>TSMC risk sensitivity (ρ)</span><output data-o="rho">0.80</output></span>
+      <input type="range" min="0" max="1.5" step="0.05" value="0.8" data-in="rho" />
+    </label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Terminal histories</div><div class="v" data-out="leaves">–</div></div>
+    <div class="stat"><div class="k">Nodes solved</div><div class="v" data-out="nodes">–</div></div>
+    <div class="stat"><div class="k">Solve time</div><div class="v" data-out="ms">–</div></div>
+    <div class="stat"><div class="k">SPE payoffs (US, CN, TSMC)</div><div class="v" data-out="pay">–</div></div>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Round</th><th>United States</th><th>China</th><th>TSMC</th><th>US lead</th><th>CN self-sufficiency</th><th>Escalation</th><th>TSMC margin</th></tr></thead>
+      <tbody data-out="rounds"></tbody>
+    </table>
+  </div>
+  <p class="readout">First round of the equilibrium tree. Node colors are players; the dark path is the subgame-perfect equilibrium; leaf values are the rollback payoffs of the entire remaining game.</p>
+  <div class="table-scroll">
+    <svg class="tree" role="img" aria-label="First round of the game tree"></svg>
+  </div>
+  <div class="legend">
+    <span><i style="background: var(--c1)"></i>United States</span>
+    <span><i style="background: var(--c2)"></i>China</span>
+    <span><i style="background: var(--c3)"></i>TSMC</span>
+  </div>
+  <p class="readout" style="margin-top: 1.2rem">Sensitivity sweep: the game is re-solved on a 14 × 14 grid of US escalation cost against indigenization speed. Each cell is colored by the United States’ equilibrium opening move. Everything else uses the sliders above.</p>
+  <div class="two-col">
+    <svg class="heat" viewBox="0 0 380 330" role="img" aria-label="Sensitivity heatmap"></svg>
+    <div>
+      <div class="legend" style="flex-direction: column; gap: 0.4rem">
+        <span><i style="background: var(--neg)"></i>US opens with Tighten</span>
+        <span><i style="background: var(--c6)"></i>US opens with Hold</span>
+        <span><i style="background: var(--pos)"></i>US opens with Loosen</span>
+        <span><i style="background: transparent; border: 2px solid var(--text)"></i>Current slider settings</span>
+      </div>
+      <p class="readout" data-out="sweep"></p>
+    </div>
+  </div>
+</div>
+
+<style>
+  .tree {
+    min-width: 720px;
+  }
+</style>
+
+<script>
+  import { solve, markPath, layout, draw, type TreeNode } from '../../lib/tree';
+  import { el, clear } from '../../lib/svg';
+
+  interface State { lead: number; self: number; esc: number; margin: number; div: number }
+  interface Params { R: number; alpha: number; cus: number; ccn: number; gamma: number; rho: number }
+  const PLAYERS = ['United States', 'China', 'TSMC'];
+  const US = ['Tighten', 'Hold', 'Loosen'];
+  const CN = ['Retaliate', 'Comply', 'Indigenize'];
+  const TS = ['Diversify', 'Concentrate'];
+  const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+
+  function stepUS(s: State, a: number, p: Params): State {
+    const n = { ...s };
+    if (a === 0) { n.lead += p.alpha * (1 - s.self); n.esc += 1; n.self = clamp(s.self + 0.5 * p.gamma, 0, 1); }
+    if (a === 2) { n.lead -= 0.4; n.esc = Math.max(0, s.esc - 1); }
+    return n;
+  }
+  function stepCN(s: State, a: number, p: Params): State {
+    const n = { ...s };
+    if (a === 0) { n.esc += 1; n.lead -= 0.25; n.margin -= 0.1; }
+    if (a === 1) { n.esc = Math.max(0, s.esc - 0.5); }
+    if (a === 2) { n.self = clamp(s.self + p.gamma, 0, 1); n.margin -= 0.03; }
+    return n;
+  }
+  function stepTS(s: State, a: number): State {
+    const n = { ...s };
+    if (a === 0) { n.div = clamp(s.div + 0.25, 0, 1); n.margin -= 0.05; }
+    if (a === 1) { n.margin += 0.03; }
+    return n;
+  }
+  function terminal(s: State, p: Params): number[] {
+    const us = 1.0 * s.lead - p.cus * s.esc * s.esc - 0.6 * s.self;
+    const cn = 3.0 * s.self - 0.8 * s.lead - p.ccn * s.esc * s.esc;
+    const ts = 4.0 * s.margin - p.rho * s.esc * (1 - s.div) + 0.6 * s.div;
+    return [us, cn, ts];
+  }
+
+  // Direct recursive solver on the implicit tree (no node objects), for speed.
+  let nodeCount = 0;
+  interface Res { v: number[]; a: number; s: State }
+  function solveUS(s: State, r: number, p: Params): Res {
+    nodeCount++;
+    if (r === p.R) return { v: terminal(s, p), a: -1, s };
+    let best: Res | null = null;
+    for (let a = 0; a < 3; a++) {
+      const k = solveCN(stepUS(s, a, p), r, p);
+      if (!best || k.v[0] > best.v[0] + 1e-12) best = { v: k.v, a, s };
+    }
+    return best!;
+  }
+  function solveCN(s: State, r: number, p: Params): Res {
+    nodeCount++;
+    let best: Res | null = null;
+    for (let a = 0; a < 3; a++) {
+      const k = solveTS(stepCN(s, a, p), r, p);
+      if (!best || k.v[1] > best.v[1] + 1e-12) best = { v: k.v, a, s };
+    }
+    return best!;
+  }
+  function solveTS(s: State, r: number, p: Params): Res {
+    nodeCount++;
+    let best: Res | null = null;
+    for (let a = 0; a < 2; a++) {
+      const k = solveUS(stepTS(s, a), r + 1, p);
+      if (!best || k.v[2] > best.v[2] + 1e-12) best = { v: k.v, a, s };
+    }
+    return best!;
+  }
+
+  function equilibriumPath(s0: State, p: Params) {
+    const rows: { r: number; us: string; cn: string; ts: string; s: State }[] = [];
+    let s = s0;
+    for (let r = 0; r < p.R; r++) {
+      const u = solveUS(s, r, p); s = stepUS(s, u.a, p);
+      const c = solveCN(s, r, p); s = stepCN(s, c.a, p);
+      const t = solveTS(s, r, p); s = stepTS(s, t.a);
+      rows.push({ r: r + 1, us: US[u.a], cn: CN[c.a], ts: TS[t.a], s });
+    }
+    return rows;
+  }
+
+  // Explicit first-round tree for drawing; leaves carry the rollback value of the remaining game.
+  function firstRoundTree(s0: State, p: Params): TreeNode {
+    return {
+      player: PLAYERS[0],
+      actions: US.map((ul, ua) => {
+        const s1 = stepUS(s0, ua, p);
+        return {
+          label: ul,
+          node: {
+            player: PLAYERS[1],
+            actions: CN.map((cl, ca) => {
+              const s2 = stepCN(s1, ca, p);
+              return {
+                label: cl,
+                node: {
+                  player: PLAYERS[2],
+                  actions: TS.map((tl, ta) => {
+                    const s3 = stepTS(s2, ta);
+                    const v = p.R === 1 ? terminal(s3, p) : solveUS(s3, 1, p).v;
+                    return { label: tl, node: { payoffs: v } };
+                  }),
+                },
+              };
+            }),
+          },
+        };
+      }),
+    };
+  }
+
+  function init(root: HTMLElement) {
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const tree = root.querySelector<SVGSVGElement>('svg.tree')!;
+    const heat = root.querySelector<SVGSVGElement>('svg.heat')!;
+    const s0: State = { lead: 2.0, self: 0.2, esc: 0, margin: 1.0, div: 0 };
+
+    const update = () => {
+      const p: Params = { R: +q('R').value, alpha: +q('alpha').value, cus: +q('cus').value, ccn: +q('ccn').value, gamma: +q('gamma').value, rho: +q('rho').value };
+      o('R').textContent = String(p.R); o('alpha').textContent = p.alpha.toFixed(2); o('cus').textContent = p.cus.toFixed(2);
+      o('ccn').textContent = p.ccn.toFixed(2); o('gamma').textContent = p.gamma.toFixed(2); o('rho').textContent = p.rho.toFixed(2);
+
+      nodeCount = 0;
+      const t0 = performance.now();
+      const res = solveUS(s0, 0, p);
+      const ms = performance.now() - t0;
+      out('leaves').textContent = Math.pow(18, p.R).toLocaleString();
+      out('nodes').textContent = nodeCount.toLocaleString();
+      out('ms').textContent = `${ms.toFixed(1)} ms`;
+      out('pay').textContent = `(${res.v.map((v) => v.toFixed(2)).join(', ')})`;
+
+      const rows = equilibriumPath(s0, p);
+      out('rounds').innerHTML = rows
+        .map((r) => `<tr><td>${r.r}</td><td>${r.us}</td><td>${r.cn}</td><td>${r.ts}</td><td>${r.s.lead.toFixed(2)}</td><td>${r.s.self.toFixed(2)}</td><td>${r.s.esc.toFixed(1)}</td><td>${r.s.margin.toFixed(2)}</td></tr>`)
+        .join('');
+
+      const ft = firstRoundTree(s0, p);
+      const solved = solve(ft, PLAYERS);
+      markPath(solved); layout(solved); draw(tree, solved, PLAYERS, { rowH: 26, right: 130 });
+
+      // Sweep c_US (x) vs gamma (y) at the current other settings.
+      clear(heat);
+      const G = 14;
+      const L = 50, R = 360, T = 16, B = 290;
+      const cw = (R - L) / G, ch = (B - T) / G;
+      const cusVals = Array.from({ length: G }, (_, i) => (i / (G - 1)) * 1.0);
+      const gVals = Array.from({ length: G }, (_, j) => 0.02 + (j / (G - 1)) * 0.48);
+      const colors = ['var(--neg)', 'var(--c6)', 'var(--pos)'];
+      const counts = [0, 0, 0];
+      const sweepR = Math.min(p.R, 3);
+      for (let i = 0; i < G; i++)
+        for (let j = 0; j < G; j++) {
+          const pp = { ...p, R: sweepR, cus: cusVals[i], gamma: gVals[j] };
+          const a = solveUS(s0, 0, pp).a;
+          counts[a]++;
+          heat.appendChild(el('rect', { x: L + i * cw, y: B - (j + 1) * ch, width: cw - 1, height: ch - 1, fill: colors[a], opacity: 0.85 }));
+        }
+      const ci = Math.round((p.cus / 1.0) * (G - 1)), cj = Math.round(((p.gamma - 0.02) / 0.48) * (G - 1));
+      heat.appendChild(el('rect', { x: L + ci * cw - 1, y: B - (cj + 1) * ch - 1, width: cw + 1, height: ch + 1, fill: 'none', stroke: 'var(--text)', 'stroke-width': 2 }));
+      for (let i = 0; i < G; i += 3) heat.appendChild(el('text', { x: L + i * cw + cw / 2, y: B + 14, class: 'tick', 'text-anchor': 'middle' }, cusVals[i].toFixed(2)));
+      for (let j = 0; j < G; j += 3) heat.appendChild(el('text', { x: L - 5, y: B - j * ch - ch / 2 + 4, class: 'tick', 'text-anchor': 'end' }, gVals[j].toFixed(2)));
+      heat.appendChild(el('text', { x: (L + R) / 2, y: B + 30, class: 'lbl muted', 'text-anchor': 'middle' }, 'US escalation cost c_US'));
+      heat.appendChild(el('text', { x: 12, y: (T + B) / 2, class: 'lbl muted', 'text-anchor': 'middle', transform: `rotate(-90 12 ${(T + B) / 2})` }, 'indigenization speed γ'));
+      const tot = G * G;
+      out('sweep').innerHTML = `Across ${tot} parameter combinations (R = ${sweepR}): Tighten in <strong>${((100 * counts[0]) / tot).toFixed(0)}%</strong>, Hold in <strong>${((100 * counts[1]) / tot).toFixed(0)}%</strong>, Loosen in <strong>${((100 * counts[2]) / tot).toFixed(0)}%</strong>. The boundary between regions is where the equilibrium flips: a small change in a parameter near it changes the whole path.`;
+    };
+    ['R', 'alpha', 'cus', 'ccn', 'gamma', 'rho'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="dyn"]').forEach(init);
+</script>

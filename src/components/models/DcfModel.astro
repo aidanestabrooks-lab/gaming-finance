@@ -1,0 +1,145 @@
+---
+/**
+ * Multi-stage FCFF model (CFA Level II equity): high-growth stage, linear fade
+ * to terminal growth, reinvestment driven by a sales-to-capital ratio, Gordon
+ * terminal value. Includes a WACC x g sensitivity grid and a reverse DCF that
+ * solves for the growth rate implied by a market price.
+ */
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+  company?: string;
+}
+const { id, title = 'Multi-stage FCFF valuation', note, company = 'Hyperscaler Co.' } = Astro.props;
+---
+
+<div class="model" data-model="dcf" id={id} data-company={company}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    <p class="model-note">{note ?? `${company} · $ billions unless noted`}</p>
+  </div>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Revenue, year 0</span><output data-o="rev">$200B</output></span><input type="range" min="10" max="800" step="5" value="200" data-in="rev" /></label>
+    <label class="ctl"><span class="lab"><span>Stage-1 growth (yrs 1–5)</span><output data-o="g1">18%</output></span><input type="range" min="-0.05" max="0.5" step="0.005" value="0.18" data-in="g1" /></label>
+    <label class="ctl"><span class="lab"><span>Fade years (stage 2)</span><output data-o="fade">5</output></span><input type="range" min="0" max="10" step="1" value="5" data-in="fade" /></label>
+    <label class="ctl"><span class="lab"><span>Terminal growth</span><output data-o="gt">3.0%</output></span><input type="range" min="0" max="0.05" step="0.0025" value="0.03" data-in="gt" /></label>
+    <label class="ctl"><span class="lab"><span>EBIT margin</span><output data-o="m">30%</output></span><input type="range" min="0.02" max="0.6" step="0.01" value="0.3" data-in="m" /></label>
+    <label class="ctl"><span class="lab"><span>Tax rate</span><output data-o="t">21%</output></span><input type="range" min="0" max="0.4" step="0.01" value="0.21" data-in="t" /></label>
+    <label class="ctl"><span class="lab"><span>Sales-to-capital (capex intensity)</span><output data-o="s2c">1.2×</output></span><input type="range" min="0.3" max="4" step="0.05" value="1.2" data-in="s2c" /></label>
+    <label class="ctl"><span class="lab"><span>WACC</span><output data-o="wacc">9.0%</output></span><input type="range" min="0.04" max="0.16" step="0.0025" value="0.09" data-in="wacc" /></label>
+    <label class="ctl"><span class="lab"><span>Net debt (cash negative)</span><output data-o="nd">−$40B</output></span><input type="range" min="-300" max="300" step="5" value="-40" data-in="nd" /></label>
+    <label class="ctl"><span class="lab"><span>Shares (billions)</span><output data-o="sh">8.0</output></span><input type="range" min="0.5" max="30" step="0.1" value="8" data-in="sh" /></label>
+    <label class="ctl"><span class="lab"><span>Market price (for reverse DCF)</span><output data-o="px">$180</output></span><input type="range" min="5" max="1000" step="5" value="180" data-in="px" /></label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">PV of stage FCFF</div><div class="v" data-out="pvf">–</div></div>
+    <div class="stat"><div class="k">PV of terminal value</div><div class="v" data-out="pvt">–</div><div class="k" data-out="tvshare">–</div></div>
+    <div class="stat"><div class="k">Enterprise value</div><div class="v" data-out="ev">–</div></div>
+    <div class="stat"><div class="k">Equity value / share</div><div class="v" data-out="ps">–</div></div>
+    <div class="stat"><div class="k">Upside vs market</div><div class="v" data-out="up">–</div></div>
+    <div class="stat"><div class="k">Reverse DCF: implied stage-1 growth</div><div class="v" data-out="ig">–</div></div>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Year</th><th>Revenue</th><th>Growth</th><th>EBIT(1−t)</th><th>Reinvestment</th><th>FCFF</th><th>Discount factor</th><th>PV</th></tr></thead>
+      <tbody data-out="rows"></tbody>
+    </table>
+  </div>
+  <p class="readout">Sensitivity of value per share to WACC (rows) and terminal growth (columns). Shaded by distance from the market price.</p>
+  <div class="table-scroll">
+    <table class="sens"><thead data-out="shead"></thead><tbody data-out="sbody"></tbody></table>
+  </div>
+</div>
+
+<style>
+  .sens td {
+    font-family: var(--mono);
+  }
+</style>
+
+<script>
+  import { fmt, bisect } from '../../lib/stats';
+
+  interface In { rev: number; g1: number; fade: number; gt: number; m: number; t: number; s2c: number; wacc: number; nd: number; sh: number; px: number }
+
+  function value(i: In, g1 = i.g1, wacc = i.wacc, gt = i.gt) {
+    const N = 5 + i.fade;
+    const rows: { y: number; rev: number; g: number; nopat: number; reinv: number; fcff: number; df: number; pv: number }[] = [];
+    let rev = i.rev, pvf = 0;
+    for (let y = 1; y <= N; y++) {
+      const g = y <= 5 ? g1 : g1 + ((gt - g1) * (y - 5)) / (i.fade || 1);
+      const next = rev * (1 + g);
+      const nopat = next * i.m * (1 - i.t);
+      const reinv = Math.max(0, (next - rev) / i.s2c);
+      const fcff = nopat - reinv;
+      const df = 1 / Math.pow(1 + wacc, y);
+      const pv = fcff * df;
+      pvf += pv;
+      rows.push({ y, rev: next, g, nopat, reinv, fcff, df, pv });
+      rev = next;
+    }
+    // Terminal: reinvestment consistent with growth: g / ROIC where ROIC = margin*(1-t)*s2c.
+    const last = rows[rows.length - 1];
+    const roic = i.m * (1 - i.t) * i.s2c;
+    const reinvRate = roic > 0 ? Math.min(0.95, Math.max(0, gt / roic)) : 0;
+    const fcffT = last.rev * (1 + gt) * i.m * (1 - i.t) * (1 - reinvRate);
+    const spread = wacc - gt;
+    const tv = spread > 0.002 ? fcffT / spread : NaN;
+    const pvt = tv * last.df;
+    const ev = pvf + pvt;
+    const eq = ev - i.nd;
+    const ps = eq / i.sh;
+    return { rows, pvf, pvt, ev, eq, ps, tv };
+  }
+
+  function init(root: HTMLElement) {
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const keys = ['rev', 'g1', 'fade', 'gt', 'm', 't', 's2c', 'wacc', 'nd', 'sh', 'px'] as const;
+
+    const update = () => {
+      const i = Object.fromEntries(keys.map((k) => [k, +q(k).value])) as unknown as In;
+      o('rev').textContent = `$${i.rev}B`; o('g1').textContent = fmt.pct(i.g1, 1); o('fade').textContent = String(i.fade); o('gt').textContent = fmt.pct(i.gt, 2);
+      o('m').textContent = fmt.pct(i.m, 0); o('t').textContent = fmt.pct(i.t, 0); o('s2c').textContent = `${i.s2c.toFixed(2)}×`; o('wacc').textContent = fmt.pct(i.wacc, 2);
+      o('nd').textContent = `${i.nd < 0 ? '−' : ''}$${Math.abs(i.nd)}B`; o('sh').textContent = i.sh.toFixed(1); o('px').textContent = fmt.usd(i.px, 0);
+
+      const v = value(i);
+      out('pvf').textContent = `$${v.pvf.toFixed(0)}B`;
+      out('pvt').textContent = Number.isNaN(v.pvt) ? 'n/a (WACC ≤ g)' : `$${v.pvt.toFixed(0)}B`;
+      out('tvshare').textContent = Number.isNaN(v.pvt) ? '' : `${fmt.pct(v.pvt / v.ev, 0)} of EV`;
+      out('ev').textContent = Number.isNaN(v.ev) ? '–' : `$${v.ev.toFixed(0)}B`;
+      out('ps').textContent = Number.isNaN(v.ps) ? '–' : fmt.usd(v.ps, 2);
+      const up = v.ps / i.px - 1;
+      const ue = out('up');
+      ue.textContent = Number.isNaN(up) ? '–' : `${up >= 0 ? '+' : '−'}${fmt.pct(Math.abs(up), 1)}`;
+      ue.className = 'v ' + (up > 0 ? 'pos' : 'neg');
+      // Reverse DCF: find g1 such that value per share equals the market price.
+      const f = (g: number) => value(i, g).ps - i.px;
+      const lo = f(-0.2), hi = f(0.8);
+      const ig = lo * hi < 0 ? bisect(f, -0.2, 0.8, 1e-6) : NaN;
+      out('ig').textContent = Number.isNaN(ig) ? 'out of range' : `${fmt.pct(ig, 1)} / yr for 5 yrs`;
+
+      out('rows').innerHTML = v.rows
+        .map((r) => `<tr><td>${r.y}</td><td>${r.rev.toFixed(1)}</td><td>${fmt.pct(r.g, 1)}</td><td>${r.nopat.toFixed(1)}</td><td>${r.reinv.toFixed(1)}</td><td>${r.fcff.toFixed(1)}</td><td>${r.df.toFixed(3)}</td><td>${r.pv.toFixed(1)}</td></tr>`)
+        .join('') + `<tr><th>Terminal</th><td colspan="4"></td><td>${Number.isNaN(v.tv) ? 'n/a' : `TV ${v.tv.toFixed(0)}`}</td><td></td><td>${Number.isNaN(v.pvt) ? 'n/a' : v.pvt.toFixed(1)}</td></tr>`;
+
+      const waccs = [-0.02, -0.01, 0, 0.01, 0.02].map((d) => i.wacc + d);
+      const gts = [-0.01, -0.005, 0, 0.005, 0.01].map((d) => Math.max(0, i.gt + d));
+      out('shead').innerHTML = `<tr><th>WACC \\ g</th>${gts.map((g) => `<th>${fmt.pct(g, 2)}</th>`).join('')}</tr>`;
+      out('sbody').innerHTML = waccs
+        .map((w) => `<tr><th>${fmt.pct(w, 2)}</th>${gts.map((g) => {
+          const p = value(i, i.g1, w, g).ps;
+          const d = p / i.px - 1;
+          const col = Number.isNaN(p) ? 'transparent' : d > 0 ? `rgba(31,122,77,${Math.min(0.6, Math.abs(d))})` : `rgba(180,53,42,${Math.min(0.6, Math.abs(d))})`;
+          return `<td style="background:${col}">${Number.isNaN(p) ? 'n/a' : fmt.usd(p, 0)}</td>`;
+        }).join('')}</tr>`)
+        .join('');
+    };
+    keys.forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="dcf"]').forEach(init);
+</script>

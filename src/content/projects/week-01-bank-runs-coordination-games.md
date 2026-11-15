@@ -1,6 +1,6 @@
 ---
 title: "Bank Runs Are Coordination Games"
-date: 2026-10-23
+date: 2026-07-31
 week: 1
 tags: [Markets, Game Theory]
 summary: "A bank run is not a verdict on a bank's solvency. It is a coordination failure among depositors, and the structure of that game explains why runs are so fast, why deposit insurance works, and what it means for the bank stocks in your portfolio."
@@ -15,8 +15,6 @@ sources:
   - title: "Federal Reserve: Review of the Federal Reserve's Supervision and Regulation of Silicon Valley Bank"
     url: https://www.federalreserve.gov/publications/review-of-the-federal-reserves-supervision-and-regulation-of-silicon-valley-bank.htm
 ---
-
-> **Sample project.** This entry exists so the site has content to test with. Replace it with your own analysis.
 
 ## The setup
 

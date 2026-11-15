@@ -1,0 +1,50 @@
+---
+title: "Herding Into the Trade: Information Cascades"
+date: 2026-10-09
+week: 11
+tags: [Game Theory, Markets]
+summary: "A crowd of rational investors, each with a weakly informative private signal, can lock onto the wrong answer after only two of them act. The model is Bikhchandani, Hirshleifer and Welch; the simulator below runs it thousands of times and shows how often the herd is wrong, how fast it forms, and why it is fragile."
+takeaways:
+  - "A cascade starts as soon as the public record leans two to one. From that point every rational agent ignores private information, so the crowd stops aggregating it."
+  - "With 70% accurate signals, about one herd in six is wrong. With 60% signals it is more than one in four. The crowd's confidence is not evidence."
+  - "Cascades are fragile precisely because they contain little information. A single credible public signal can reverse one, which is what a 'narrative shift' is."
+  - "The agents who moved before the cascade are the only ones whose actions carry information. Weight early movers, discount followers."
+sources:
+  - title: "Bikhchandani, Hirshleifer & Welch (1992). A theory of fads, fashion, custom, and cultural change as informational cascades"
+    url: https://www.jstor.org/stable/2138632
+  - title: "CFA Institute: Behavioral Finance and Investment Processes (Level III)"
+    url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/behavioral-finance-investment-processes
+---
+import CascadeSim from '../../components/models/CascadeSim.astro';
+
+## The setup
+
+A sequence of investors decides whether to buy (UP) or sell (DOWN) a security whose true direction is unknown. Each receives a private signal that is correct with probability $s > \tfrac12$. Each observes what everyone before them *did*, but not what they *saw*. Everyone is Bayesian and everyone is rational.
+
+The first investor follows their signal. The second investor sees the first action and infers the first signal. If their own signal agrees, they act on it. If it disagrees, the two signals cancel and they fall back on their own (the tie-breaking convention in the model). The third investor now sees two actions. If both were UP, the public record contains two UP signals; one private DOWN signal cannot overturn that, so the third investor buys regardless of what they saw. So does the fourth, and the fifth, and everyone after. The private information of every subsequent investor is lost.
+
+<CascadeSim id="cascade" note="Binary state, binary signals, Bayesian agents acting in sequence. Each run draws a fresh state and fresh signals." />
+
+## The arithmetic
+
+With the tie rule above, the first two agents produce a cascade unless their signals disagree. The probability that they agree and are right is $s^2$; that they agree and are wrong is $(1-s)^2$; that they disagree and the process restarts is $2s(1-s)$. Conditioning on the process eventually settling,
+
+$$
+P(\text{wrong cascade}) = \frac{(1-s)^2}{s^2 + (1-s)^2}
+$$
+
+At $s = 0.7$ that is $0.09 / 0.58 \approx 15.5\%$. At $s = 0.6$ it is $0.16/0.52 \approx 30.8\%$. The simulator's closed-form box reports this number; the Monte Carlo box next to it should land within sampling error. Notice what is *not* in the formula: the number of agents. A thousand investors are no more accurate than three, because only the first two or three contributed information.
+
+## What the charts show
+
+The histogram records the agent at which each cascade began. Most start at agent 2 or 3. A long tail of runs where early signals kept canceling produces later onsets; those late-forming cascades are slightly more accurate, because more signals entered the public record before it tipped.
+
+The strip shows one run. Teal dots acted on their own signal. Grey dots followed the herd. Red dots followed a herd that was wrong. Hit "re-run with new seed" a few times at $s = 0.6$ and you will see entire rows of red: a market that has confidently priced the wrong direction with every participant behaving rationally.
+
+## Why cascades break
+
+A cascade rests on two or three signals. Any public information at least as strong as that, an earnings release, a regulatory decision, a credible contrarian with a track record, overturns it, and the crowd flips as fast as it formed. This is the mechanism behind sudden narrative reversals that look irrational in hindsight. Nothing irrational happened. A thin public record was replaced by a thicker one.
+
+## What this means for investors
+
+Treat consensus as a count of informative signals, not as a count of people. Ask who moved first and whether they had private information, and weight the followers at zero. When a position is crowded and the public record behind it is thin, the asymmetry favors the contrarian: the cascade cannot get more right by adding followers, but it can be overturned by a single strong signal. The trade is not "bet against the crowd." It is "find out how much the crowd actually knows."

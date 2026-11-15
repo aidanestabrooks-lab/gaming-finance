@@ -1,0 +1,115 @@
+---
+/**
+ * Common-value auction and the winner's curse. True value V ~ U[80, 120];
+ * each of n bidders sees a noisy signal x_i = V + e_i, e_i ~ N(0, sigma).
+ * Every bidder bids x_i - k*sigma. Monte Carlo over k shows that bidding your
+ * signal loses money, and finds the shading that maximizes the winner's profit.
+ */
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+}
+const { id, title = 'Winner’s curse simulator', note } = Astro.props;
+---
+
+<div class="model" data-model="auction" id={id}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    {note && <p class="model-note">{note}</p>}
+  </div>
+  <div class="controls">
+    <label class="ctl">
+      <span class="lab"><span>Bidders (n)</span><output data-o="n">6</output></span>
+      <input type="range" min="2" max="25" step="1" value="6" data-in="n" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Signal noise σ</span><output data-o="sg">8.0</output></span>
+      <input type="range" min="1" max="25" step="0.5" value="8" data-in="sg" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Your shading (k·σ)</span><output data-o="k">0.0</output></span>
+      <input type="range" min="0" max="3" step="0.05" value="0" data-in="k" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Auctions simulated</span><output data-o="m">4000</output></span>
+      <input type="range" min="500" max="20000" step="500" value="4000" data-in="m" />
+    </label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Winner’s expected profit at your k</div><div class="v" data-out="profit">–</div></div>
+    <div class="stat"><div class="k">P(winner overpays)</div><div class="v" data-out="over">–</div></div>
+    <div class="stat"><div class="k">Expected bias of the highest signal</div><div class="v" data-out="bias">–</div></div>
+    <div class="stat"><div class="k">Break-even shading (= expected bias)</div><div class="v" data-out="kstar">–</div></div>
+    <div class="stat"><div class="k">Profit at break-even shading</div><div class="v" data-out="pstar">–</div></div>
+    <div class="stat"><div class="k">Win rate at your k (symmetric)</div><div class="v" data-out="win">–</div></div>
+  </div>
+  <svg class="curve" viewBox="0 0 720 240" role="img" aria-label="Winner profit against shading"></svg>
+  <div class="legend">
+    <span><i style="background: var(--c1)"></i>Expected winner profit (all bidders shade k·σ)</span>
+    <span><i style="background: var(--c2)"></i>Your k</span>
+    <span><i style="background: var(--text)"></i>Optimum</span>
+  </div>
+</div>
+
+<script>
+  import { rng, randn, fmt } from '../../lib/stats';
+  import { el, clear, axes, path, scale } from '../../lib/svg';
+
+  function init(root: HTMLElement) {
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const svg = root.querySelector<SVGSVGElement>('svg.curve')!;
+
+    const update = () => {
+      const n = +q('n').value, sg = +q('sg').value, kMine = +q('k').value, M = +q('m').value;
+      o('n').textContent = String(n); o('sg').textContent = sg.toFixed(1); o('k').textContent = kMine.toFixed(2); o('m').textContent = String(M);
+
+      // Pre-draw the auctions once; evaluate every k on the same draws (common random numbers).
+      const u = rng(42);
+      const V: number[] = [], maxSig: number[] = [];
+      for (let r = 0; r < M; r++) {
+        const v = 80 + 40 * u();
+        let mx = -Infinity;
+        for (let i = 0; i < n; i++) mx = Math.max(mx, v + sg * randn(u));
+        V.push(v); maxSig.push(mx);
+      }
+      const profitAt = (k: number) => { let s = 0; for (let r = 0; r < M; r++) s += V[r] - (maxSig[r] - k * sg); return s / M; };
+      const overAt = (k: number) => { let c = 0; for (let r = 0; r < M; r++) if (maxSig[r] - k * sg > V[r]) c++; return c / M; };
+      const ks: number[] = [], ps: number[] = [];
+      for (let k = 0; k <= 3; k += 0.05) { ks.push(k); ps.push(profitAt(k)); }
+      // With symmetric shading the highest signal always wins, so the winner's profit is linear in k.
+      // The economically meaningful point is where it crosses zero: the expected bias of the top order statistic.
+      const bias = maxSig.reduce((a, b) => a + b, 0) / M - V.reduce((a, b) => a + b, 0) / M;
+      const kStar = bias / sg, pStar = profitAt(kStar);
+
+      const pm = profitAt(kMine);
+      const pe = out('profit');
+      pe.textContent = `${pm >= 0 ? '+' : '−'}${fmt.usd(Math.abs(pm))}`;
+      pe.className = 'v ' + (pm > 0 ? 'pos' : 'neg');
+      out('over').textContent = fmt.pct(overAt(kMine), 1);
+      out('bias').textContent = `+${fmt.usd(bias)} (${(bias / sg).toFixed(2)}σ)`;
+      out('kstar').textContent = `${kStar.toFixed(2)}σ = ${fmt.usd(kStar * sg)}`;
+      out('pstar').textContent = `≈ ${fmt.usd(pStar)} (break-even)`;
+      out('win').textContent = fmt.pct(1 / n, 1);
+
+      clear(svg);
+      const box = { left: 60, right: 700, top: 14, bottom: 200 };
+      const lo = Math.min(...ps, 0) * 1.1, hi = Math.max(...ps, 1) * 1.1;
+      const sx = scale(0, 3, box.left, box.right), sy = scale(lo, hi, box.bottom, box.top);
+      const g = el('g');
+      axes(g, sx, sy, [0, 3], [lo, hi], box, (v) => `${v.toFixed(1)}σ`, (v) => fmt.usd(v, 0));
+      svg.appendChild(g);
+      svg.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(0), y2: sy(0), stroke: 'var(--muted)', 'stroke-dasharray': '3 3' }));
+      svg.appendChild(el('path', { d: path(ks.map((k, i) => [sx(k), sy(ps[i])])), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2.5 }));
+      svg.appendChild(el('line', { x1: sx(kMine), x2: sx(kMine), y1: box.top, y2: box.bottom, stroke: 'var(--c2)', 'stroke-width': 2, 'stroke-dasharray': '5 3' }));
+      svg.appendChild(el('line', { x1: sx(kStar), x2: sx(kStar), y1: box.top, y2: box.bottom, stroke: 'var(--text)', 'stroke-width': 1.5 }));
+      svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 232, class: 'lbl muted', 'text-anchor': 'middle' }, 'bid shading below own signal, in units of σ'));
+    };
+    ['n', 'sg', 'k', 'm'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="auction"]').forEach(init);
+</script>

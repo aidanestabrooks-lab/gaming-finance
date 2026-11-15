@@ -1,6 +1,6 @@
 ---
 title: "TSMC's Silicon Shield: When a Company Becomes a Deterrent"
-date: 2026-11-13
+date: 2026-08-21
 week: 4
 tags: [Firms, Geopolitics]
 summary: "One firm makes most of the world's most advanced chips, on an island at the center of the most watched geopolitical standoff on earth. Its dominance is both its moat and the reason governments are paying it to build elsewhere."
@@ -23,8 +23,6 @@ charts:
         data: [70, 18, 8, 4]
     note: "Illustrative figures for layout testing. Replace with sourced estimates and define 'leading edge' explicitly."
 ---
-
-> **Sample project.** This entry exists so the site has content to test with. Replace it with your own analysis.
 
 ## The setup
 

@@ -7,7 +7,7 @@ export const SITE = {
   startYear: 2026,
 };
 
-export const TAGS = ['Firms', 'Geopolitics', 'Game Theory', 'Markets'] as const;
+export const TAGS = ['Firms', 'Geopolitics', 'Game Theory', 'Markets', 'CFA'] as const;
 export type Tag = (typeof TAGS)[number];
 
 // TODO: set this to your Buttondown username once the account exists.

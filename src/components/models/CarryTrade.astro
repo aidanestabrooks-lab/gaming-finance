@@ -1,0 +1,137 @@
+---
+/**
+ * Levered FX carry trade with fat tails and unwind jumps (CFA Level III
+ * currency management and risk management). Covered interest parity prices
+ * the hedged return at zero; the unhedged trade earns the rate differential
+ * while bearing a Student-t spot distribution with occasional crowded-unwind
+ * jumps. Monte Carlo produces the P&L distribution, VaR, CVaR and the
+ * probability of a margin call.
+ */
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+}
+const { id, title = 'Carry trade P&L: fat tails, jumps, VaR', note } = Astro.props;
+---
+
+<div class="model" data-model="carry" id={id}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    {note && <p class="model-note">{note}</p>}
+  </div>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Funding rate (e.g. JPY)</span><output data-o="rf">0.75%</output></span><input type="range" min="-0.01" max="0.06" step="0.0025" value="0.0075" data-in="rf" /></label>
+    <label class="ctl"><span class="lab"><span>Target rate (e.g. USD)</span><output data-o="rt">4.25%</output></span><input type="range" min="0" max="0.15" step="0.0025" value="0.0425" data-in="rt" /></label>
+    <label class="ctl"><span class="lab"><span>Spot vol (annual)</span><output data-o="vol">10%</output></span><input type="range" min="0.03" max="0.3" step="0.005" value="0.10" data-in="vol" /></label>
+    <label class="ctl"><span class="lab"><span>Tail fatness (t degrees of freedom)</span><output data-o="nu">4</output></span><input type="range" min="2.5" max="30" step="0.5" value="4" data-in="nu" /></label>
+    <label class="ctl"><span class="lab"><span>Unwind jump: annual probability</span><output data-o="jp">25%</output></span><input type="range" min="0" max="1" step="0.05" value="0.25" data-in="jp" /></label>
+    <label class="ctl"><span class="lab"><span>Unwind jump: size (adverse)</span><output data-o="js">8%</output></span><input type="range" min="0" max="0.25" step="0.01" value="0.08" data-in="js" /></label>
+    <label class="ctl"><span class="lab"><span>Leverage</span><output data-o="lev">5×</output></span><input type="range" min="1" max="20" step="1" value="5" data-in="lev" /></label>
+    <label class="ctl"><span class="lab"><span>Horizon (days)</span><output data-o="h">90</output></span><input type="range" min="5" max="365" step="5" value="90" data-in="h" /></label>
+    <label class="ctl"><span class="lab"><span>Margin call at equity loss of</span><output data-o="mc">50%</output></span><input type="range" min="0.1" max="1" step="0.05" value="0.5" data-in="mc" /></label>
+    <label class="ctl"><span class="lab"><span>Paths</span><output data-o="n">5000</output></span><input type="range" min="1000" max="20000" step="1000" value="5000" data-in="n" /></label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Carry earned over horizon (unlevered)</div><div class="v" data-out="carry">–</div></div>
+    <div class="stat"><div class="k">CIP forward implies spot move of</div><div class="v" data-out="fwd">–</div><div class="k">hedged carry = 0</div></div>
+    <div class="stat"><div class="k">Expected levered return on equity</div><div class="v" data-out="er">–</div></div>
+    <div class="stat"><div class="k">95% VaR / 99% VaR (on equity)</div><div class="v" data-out="var">–</div></div>
+    <div class="stat"><div class="k">99% CVaR (expected shortfall)</div><div class="v" data-out="cvar">–</div></div>
+    <div class="stat"><div class="k">P(margin call within horizon)</div><div class="v" data-out="pmc">–</div></div>
+    <div class="stat"><div class="k">Skewness / excess kurtosis</div><div class="v" data-out="sk">–</div></div>
+    <div class="stat"><div class="k">Sharpe-style ratio (horizon)</div><div class="v" data-out="sharpe">–</div></div>
+  </div>
+  <svg class="hist" viewBox="0 0 720 240" role="img" aria-label="Distribution of levered returns"></svg>
+  <div class="legend"><span><i style="background: var(--c1)"></i>Return on equity over the horizon</span><span><i style="background: var(--neg)"></i>99% VaR</span><span><i style="background: var(--c2)"></i>Mean</span></div>
+</div>
+
+<script>
+  import { rng, randt, fmt, quantile, mean, stdev } from '../../lib/stats';
+  import { el, clear } from '../../lib/svg';
+
+  function init(root: HTMLElement) {
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const svg = root.querySelector<SVGSVGElement>('svg.hist')!;
+
+    const update = () => {
+      const rf = +q('rf').value, rt = +q('rt').value, vol = +q('vol').value, nu = +q('nu').value, jp = +q('jp').value, js = +q('js').value;
+      const lev = +q('lev').value, H = +q('h').value, mc = +q('mc').value, N = +q('n').value;
+      o('rf').textContent = fmt.pct(rf, 2); o('rt').textContent = fmt.pct(rt, 2); o('vol').textContent = fmt.pct(vol, 1); o('nu').textContent = nu.toFixed(1);
+      o('jp').textContent = fmt.pct(jp, 0); o('js').textContent = fmt.pct(js, 0); o('lev').textContent = `${lev}×`; o('h').textContent = String(H); o('mc').textContent = fmt.pct(mc, 0); o('n').textContent = String(N);
+
+      const T = H / 365;
+      const carry = (rt - rf) * T;
+      out('carry').textContent = `+${fmt.pct(carry, 2)}`;
+      // CIP: F/S = (1 + r_target T) / (1 + r_fund T). Holding target currency, forward implies the target depreciates by carry.
+      const fwd = (1 + rf * T) / (1 + rt * T) - 1;
+      out('fwd').textContent = `${fmt.pct(fwd, 2)} (target vs funding)`;
+
+      const u = rng(2024);
+      const dayVol = vol / Math.sqrt(252);
+      const tScale = nu > 2 ? Math.sqrt((nu - 2) / nu) : 1; // unit-variance t
+      const days = Math.round(H * (252 / 365));
+      const pDay = 1 - Math.pow(1 - jp, 1 / 252);
+      const rets: number[] = [];
+      let calls = 0;
+      for (let p = 0; p < N; p++) {
+        let spot = 0, called = false;
+        for (let d = 0; d < days; d++) {
+          spot += dayVol * tScale * randt(u, nu);
+          if (u() < pDay) spot -= js * (0.5 + u());
+          const eq = lev * (spot + (carry * (d + 1)) / days);
+          if (eq <= -mc) { called = true; break; }
+        }
+        if (called) calls++;
+        rets.push(called ? -mc : lev * (spot + carry));
+      }
+      const sorted = [...rets].sort((a, b) => a - b);
+      const m = mean(rets), sd = stdev(rets);
+      const v95 = -quantile(sorted, 0.05), v99 = -quantile(sorted, 0.01);
+      const tail = sorted.slice(0, Math.max(1, Math.floor(0.01 * N)));
+      const cvar = -mean(tail);
+      const sk = rets.reduce((a, r) => a + Math.pow((r - m) / sd, 3), 0) / N;
+      const ku = rets.reduce((a, r) => a + Math.pow((r - m) / sd, 4), 0) / N - 3;
+      const ee = out('er');
+      ee.textContent = `${m >= 0 ? '+' : '−'}${fmt.pct(Math.abs(m), 2)}`;
+      ee.className = 'v ' + (m >= 0 ? 'pos' : 'neg');
+      out('var').textContent = `${fmt.pct(v95, 1)} / ${fmt.pct(v99, 1)}`;
+      out('cvar').textContent = fmt.pct(cvar, 1);
+      const pm = out('pmc');
+      pm.textContent = fmt.pct(calls / N, 1);
+      pm.className = 'v ' + (calls / N > 0.05 ? 'neg' : '');
+      out('sk').textContent = `${sk.toFixed(2)} / ${ku.toFixed(1)}`;
+      out('sharpe').textContent = (m / sd).toFixed(2);
+
+      clear(svg);
+      const bins = 60;
+      const lo = Math.max(-1, quantile(sorted, 0.002)), hi = quantile(sorted, 0.998);
+      const bw = (hi - lo) / bins || 1;
+      const cnt = new Array(bins).fill(0);
+      for (const r of rets) { const b = Math.min(bins - 1, Math.max(0, Math.floor((r - lo) / bw))); cnt[b]++; }
+      const L = 40, R = 700, T0 = 14, B = 200;
+      const mx = Math.max(...cnt);
+      const sx = (x: number) => L + ((x - lo) / (hi - lo)) * (R - L);
+      cnt.forEach((c, i) => {
+        const x0 = sx(lo + i * bw);
+        const h = ((B - T0) * c) / mx;
+        const x = lo + (i + 0.5) * bw;
+        svg.appendChild(el('rect', { x: x0, y: B - h, width: Math.max(1, (R - L) / bins - 1), height: h, fill: x < -v99 ? 'var(--neg)' : 'var(--c1)', opacity: 0.9 }));
+      });
+      svg.appendChild(el('line', { x1: L, x2: R, y1: B, y2: B, class: 'axis' }));
+      for (let k = 0; k <= 6; k++) {
+        const x = lo + (k / 6) * (hi - lo);
+        svg.appendChild(el('text', { x: sx(x), y: B + 14, class: 'tick', 'text-anchor': 'middle' }, fmt.pct(x, 0)));
+      }
+      svg.appendChild(el('line', { x1: sx(m), x2: sx(m), y1: T0, y2: B, stroke: 'var(--c2)', 'stroke-width': 2 }));
+      svg.appendChild(el('line', { x1: sx(-v99), x2: sx(-v99), y1: T0, y2: B, stroke: 'var(--neg)', 'stroke-width': 2, 'stroke-dasharray': '5 3' }));
+      svg.appendChild(el('text', { x: (L + R) / 2, y: 232, class: 'lbl muted', 'text-anchor': 'middle' }, `return on equity over ${H} days at ${lev}× leverage (${N.toLocaleString()} paths)`));
+    };
+    ['rf', 'rt', 'vol', 'nu', 'jp', 'js', 'lev', 'h', 'mc', 'n'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="carry"]').forEach(init);
+</script>

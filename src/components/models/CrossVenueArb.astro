@@ -1,0 +1,116 @@
+---
+/**
+ * Two-venue arbitrage on the same binary event: buy YES where it is cheap and
+ * NO where YES is expensive. Each venue has its own fee rate on the Kalshi-style
+ * quadratic schedule (set 0 for a venue without trading fees). Returns are
+ * annualized over the days to resolution because the capital is locked.
+ */
+interface Props {
+  id: string;
+  event: string;
+  venueA?: string;
+  venueB?: string;
+  yesA?: number;
+  yesB?: number;
+  feeA?: number;
+  feeB?: number;
+  days?: number;
+  title?: string;
+}
+const {
+  id, event, venueA = 'Venue A', venueB = 'Venue B', yesA = 54, yesB = 60, feeA = 0.07, feeB = 0, days = 30,
+  title = 'Cross-venue arbitrage',
+} = Astro.props;
+---
+
+<div class="model" data-model="cross" id={id} data-a={venueA} data-b={venueB}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    <p class="model-note">{event}</p>
+  </div>
+  <div class="controls">
+    <label class="ctl">
+      <span class="lab"><span>{venueA} YES price</span><output data-o="ya">{yesA}¢</output></span>
+      <input type="range" min="1" max="99" value={yesA} data-in="ya" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>{venueB} YES price</span><output data-o="yb">{yesB}¢</output></span>
+      <input type="range" min="1" max="99" value={yesB} data-in="yb" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>{venueA} fee rate</span><output data-o="fa">{(feeA * 100).toFixed(2)}%</output></span>
+      <input type="range" min="0" max="0.1" step="0.0025" value={feeA} data-in="fa" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>{venueB} fee rate</span><output data-o="fb">{(feeB * 100).toFixed(2)}%</output></span>
+      <input type="range" min="0" max="0.1" step="0.0025" value={feeB} data-in="fb" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Days to resolution</span><output data-o="d">{days}</output></span>
+      <input type="range" min="1" max="365" value={days} data-in="d" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Contracts</span><output data-o="c">500</output></span>
+      <input type="range" min="1" max="5000" step="1" value="500" data-in="c" />
+    </label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Trade</div><div class="v" data-out="trade" style="font-size: 0.95rem">–</div></div>
+    <div class="stat"><div class="k">Cost per $1 of payout</div><div class="v" data-out="cost">–</div></div>
+    <div class="stat"><div class="k">Locked-in profit</div><div class="v" data-out="profit">–</div></div>
+    <div class="stat"><div class="k">Return on capital</div><div class="v" data-out="roc">–</div></div>
+    <div class="stat"><div class="k">Annualized (simple)</div><div class="v" data-out="ann">–</div></div>
+    <div class="stat"><div class="k">Break-even spread</div><div class="v" data-out="be">–</div></div>
+  </div>
+  <p class="readout" data-out="expl"></p>
+</div>
+
+<script>
+  import { fmt } from '../../lib/stats';
+
+  const orderFee = (rate: number, C: number, P: number) => Math.ceil(100 * rate * C * P * (1 - P)) / 100;
+
+  function init(root: HTMLElement) {
+    const A = root.dataset.a!, B = root.dataset.b!;
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+
+    const update = () => {
+      const ya = +q('ya').value / 100, yb = +q('yb').value / 100;
+      const fa = +q('fa').value, fb = +q('fb').value;
+      const d = +q('d').value, C = +q('c').value;
+      o('ya').textContent = fmt.cents(ya); o('yb').textContent = fmt.cents(yb);
+      o('fa').textContent = fmt.pct(fa, 2); o('fb').textContent = fmt.pct(fb, 2);
+      o('d').textContent = String(d); o('c').textContent = String(C);
+
+      // Direction 1: YES at A, NO at B. Direction 2: YES at B, NO at A. Pick the better.
+      const d1 = { yesAt: A, noAt: B, cost: C * (ya + (1 - yb)) + orderFee(fa, C, ya) + orderFee(fb, C, 1 - yb) };
+      const d2 = { yesAt: B, noAt: A, cost: C * (yb + (1 - ya)) + orderFee(fb, C, yb) + orderFee(fa, C, 1 - ya) };
+      const best = d1.cost <= d2.cost ? d1 : d2;
+      const profit = C - best.cost;
+      const roc = profit / best.cost;
+      const ann = roc * (365 / d);
+      const feePer = (orderFee(fa, C, ya) + orderFee(fb, C, yb)) / C;
+
+      out('trade').textContent = `Buy YES on ${best.yesAt}, buy NO on ${best.noAt}`;
+      out('cost').textContent = fmt.usd(best.cost / C, 4);
+      const p = out('profit');
+      p.textContent = `${profit >= 0 ? '+' : '−'}${fmt.usd(Math.abs(profit))}`;
+      p.className = 'v ' + (profit > 0 ? 'pos' : profit < 0 ? 'neg' : '');
+      out('roc').textContent = fmt.pct(roc, 2);
+      out('ann').textContent = fmt.pct(ann, 1);
+      out('be').textContent = `≈ ${fmt.cents(feePer)} of price gap`;
+      out('expl').innerHTML =
+        `Payout is <strong>$1 per contract</strong> whichever way the event resolves, so the position is riskless once both legs fill. ` +
+        `The spread between venues is <strong>${fmt.cents(Math.abs(ya - yb))}</strong>; fees eat about <strong>${fmt.cents(feePer)}</strong> of it. ` +
+        (profit > 0
+          ? `Capital of <strong>${fmt.usd(best.cost)}</strong> is tied up for ${d} days to earn ${fmt.usd(profit)}.`
+          : `At this gap the fees exceed the edge; the trade loses money even though both legs are "right".`);
+    };
+    ['ya', 'yb', 'fa', 'fb', 'd', 'c'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="cross"]').forEach(init);
+</script>

@@ -1,6 +1,6 @@
 ---
 title: "Boeing and Airbus: The Duopoly That Can't Afford a Price War"
-date: 2026-11-06
+date: 2026-08-14
 week: 3
 tags: [Firms, Game Theory]
 summary: "Two firms build nearly every large commercial aircraft on earth. Game theory predicts they should compete fiercely on price. They mostly don't, and the reason explains where the value in this industry actually sits."
@@ -25,8 +25,6 @@ charts:
         data: [380, 157, 340, 480, 528, 348, 540]
     note: "Illustrative figures for layout testing. Replace with company-reported deliveries."
 ---
-
-> **Sample project.** This entry exists so the site has content to test with. Replace it with your own analysis.
 
 ## The setup
 

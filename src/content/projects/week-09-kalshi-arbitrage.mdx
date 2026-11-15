@@ -1,0 +1,90 @@
+---
+title: "Kalshi Arbitrage: The Math of Mispriced Probabilities"
+date: 2026-09-25
+week: 9
+tags: [Markets, Game Theory]
+summary: "Event contracts are probabilities with a bid and an ask. When a set of mutually exclusive outcomes sums to something other than one, or when two venues disagree, there is a riskless trade, but only after fees, which on Kalshi are quadratic in price. Three tools below: a bucket scanner, a cross-venue calculator, and a Kelly sizer for the edges that are not riskless."
+takeaways:
+  - "A Dutch book exists when the sum of YES prices across all outcomes of a market is below one dollar minus fees (buy all YES) or above one dollar plus fees (buy all NO)."
+  - "Kalshi's fee is 7% of P(1−P) per contract, rounded up to the cent per order. It is largest at 50¢ and near zero at the extremes, so most apparent arbitrages in mid-priced buckets vanish after fees."
+  - "Cross-venue arbitrage locks capital until resolution. Annualize the return before you call it good; a 2% riskless return over nine months is not."
+  - "For edges that are not riskless, the Kelly fraction on a binary contract is (p − m)/(1 − m). Half Kelly keeps most of the growth with a fraction of the drawdown."
+sources:
+  - title: "Kalshi: fee schedule and trading rules (see Help Center)"
+    url: https://kalshi.com/
+  - title: "CFTC: event contracts"
+    url: https://www.cftc.gov/
+  - title: "Kelly, J. L. (1956). A new interpretation of information rate"
+    url: https://ieeexplore.ieee.org/document/6771227
+---
+import BucketArb from '../../components/models/BucketArb.astro';
+import CrossVenueArb from '../../components/models/CrossVenueArb.astro';
+import KellySizer from '../../components/models/KellySizer.astro';
+
+## The setup
+
+A Kalshi contract pays $1 if an event happens and $0 otherwise, so its price is the market's probability. Markets with several buckets ("the Fed funds rate after the December meeting will be in range X") are a partition: exactly one bucket resolves YES. The prices of a partition should sum to $1. They often do not, because each bucket has its own order book, its own liquidity, and its own crowd.
+
+The fee is where most of the free money goes. Kalshi charges, per order,
+
+$$
+\text{Fee} = \left\lceil\, 0.07 \times C \times P \times (1 - P) \,\right\rceil_{\text{cents}}
+$$
+
+where $C$ is contracts and $P$ is the price in dollars. The product $P(1-P)$ peaks at $0.25$ when $P = 0.5$, so a 50¢ contract costs 1.75¢ in fees and a 95¢ contract costs about 0.33¢. Fees punish mid-priced buckets and spare the tails.
+
+## Tool 1: the bucket scanner
+
+Enter the YES ask for each bucket. The scanner computes two trades. Buy every YES: cost is the sum of prices plus fees, payout is exactly $1 per contract set. Buy every NO: cost is the sum of $(1 - P_i)$ plus fees, and payout is $(N-1)$ dollars because every bucket but one resolves NO.
+
+<BucketArb
+  id="fed-buckets"
+  market="Illustrative partition: Fed funds target range after the next meeting"
+  buckets={[
+    { label: "≤ 3.25%", yes: 4 },
+    { label: "3.25–3.50%", yes: 22 },
+    { label: "3.50–3.75%", yes: 47 },
+    { label: "3.75–4.00%", yes: 21 },
+    { label: "≥ 4.00%", yes: 3 },
+  ]}
+/>
+
+The default sum is 97¢, which looks like a 3¢ underround. Switch the fee schedule to taker and the fees across five orders consume most of it. Drop the 47¢ bucket to 44¢ and the trade reappears. The band of fee-free sums is reported at the bottom right: any sum inside it is noise, not opportunity.
+
+## Tool 2: cross-venue arbitrage
+
+The same event trades on two venues at different prices. Buy YES where it is cheaper and NO where it is dearer; the payout is $1 regardless of the outcome.
+
+<CrossVenueArb
+  id="cross"
+  event="Illustrative: same binary event quoted on two venues"
+  venueA="Kalshi"
+  venueB="Other venue"
+  yesA={54}
+  yesB={60}
+  feeA={0.07}
+  feeB={0}
+  days={45}
+/>
+
+The break-even spread is the sum of both venues' fees at the two prices. Below it, a trade that is "right" on both legs still loses. Above it, the return is riskless but the capital is locked until resolution. The annualized figure is the one to compare against Treasury bills, and it is frequently lower.
+
+## Tool 3: Kelly sizing when the edge is not riskless
+
+Most of the time you do not have an arbitrage. You have a belief that differs from the price. If you think an event has probability $p$ and the market prices it at $m$, the growth-optimal fraction of bankroll to put on YES is
+
+$$
+f^* = \frac{p - m}{1 - m}
+$$
+
+and on NO, when $p < m$, it is $f^* = (m - p)/m$. Expected log growth per bet is $g(f) = p\ln(1 + fb) + (1-p)\ln(1 - f)$ with $b = (1-m)/m$. The chart shows the whole curve: full Kelly sits at the peak, half Kelly earns about three quarters of the growth with far less variance, and anything beyond full Kelly is strictly worse.
+
+<KellySizer id="kelly" price={40} belief={50} bankroll={10000} note="Binary contract paying $1. Edge is your probability minus the market's." />
+
+## The game theory underneath
+
+Why do these gaps exist at all? Because each bucket's order book is a separate game with separate players. A trader with a strong view on one range pushes that bucket without touching the others. Arbitrageurs are the players who enforce the partition constraint, and their incentive to do so is exactly the after-fee profit above. When fees exceed the gap, nobody enforces it, and the partition can stay mispriced for days. That is why the inefficiencies cluster in mid-priced buckets of thin markets.
+
+## What this means for investors
+
+Prediction markets are a probability feed with a fee schedule bolted on. The riskless trades are rare, small, and capital-hungry once annualized. The real use for most investors is the third tool: a disciplined way to size a view against a market price, which is the same problem as sizing any trade, with the advantage that the payoff is binary and the math is exact.

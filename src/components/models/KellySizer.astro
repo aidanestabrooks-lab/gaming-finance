@@ -1,0 +1,125 @@
+---
+/**
+ * Kelly criterion for a binary contract priced at m paying $1. If your
+ * probability p exceeds m, buy YES with fraction f* = (p - m) / (1 - m);
+ * if p < m, buy NO with f* = (m - p) / m. Plots expected log growth vs. fraction.
+ */
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+  price?: number;
+  belief?: number;
+  bankroll?: number;
+}
+const { id, title = 'Kelly sizing for a non-arbitrage edge', note, price = 40, belief = 50, bankroll = 10000 } = Astro.props;
+---
+
+<div class="model" data-model="kelly" id={id}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    {note && <p class="model-note">{note}</p>}
+  </div>
+  <div class="controls">
+    <label class="ctl">
+      <span class="lab"><span>Market price of YES (m)</span><output data-o="m">{price}¢</output></span>
+      <input type="range" min="1" max="99" value={price} data-in="m" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Your probability (p)</span><output data-o="p">{belief}%</output></span>
+      <input type="range" min="1" max="99" value={belief} data-in="p" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Bankroll</span><output data-o="b">${bankroll}</output></span>
+      <input type="range" min="500" max="100000" step="500" value={bankroll} data-in="b" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Fraction of Kelly</span><output data-o="k">50%</output></span>
+      <input type="range" min="0.1" max="1.5" step="0.05" value="0.5" data-in="k" />
+    </label>
+  </div>
+  <div class="two-col">
+    <div class="stats" style="grid-template-columns: 1fr 1fr">
+      <div class="stat"><div class="k">Side</div><div class="v" data-out="side">–</div></div>
+      <div class="stat"><div class="k">Edge (p − m)</div><div class="v" data-out="edge">–</div></div>
+      <div class="stat"><div class="k">Full Kelly f*</div><div class="v" data-out="f">–</div></div>
+      <div class="stat"><div class="k">Your stake</div><div class="v" data-out="stake">–</div></div>
+      <div class="stat"><div class="k">Expected log growth / bet</div><div class="v" data-out="g">–</div></div>
+      <div class="stat"><div class="k">P(lose the stake)</div><div class="v" data-out="pl">–</div></div>
+    </div>
+    <div>
+      <svg class="kc" viewBox="0 0 360 230" role="img" aria-label="Growth rate against fraction wagered"></svg>
+      <div class="legend">
+        <span><i style="background: var(--c1)"></i>Expected log growth</span>
+        <span><i style="background: var(--c2)"></i>Your fraction</span>
+        <span><i style="background: var(--text)"></i>Full Kelly</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { el, clear, axes, path, scale } from '../../lib/svg';
+  import { fmt } from '../../lib/stats';
+
+  function init(root: HTMLElement) {
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const svg = root.querySelector<SVGSVGElement>('svg.kc')!;
+
+    const update = () => {
+      const m = +q('m').value / 100, p = +q('p').value / 100, B = +q('b').value, k = +q('k').value;
+      o('m').textContent = fmt.cents(m); o('p').textContent = fmt.pct(p, 0); o('b').textContent = fmt.usd(B, 0); o('k').textContent = fmt.pct(k, 0);
+
+      // Normalize to "a bet that wins with prob w at net odds b".
+      const yes = p >= m;
+      const w = yes ? p : 1 - p;
+      const cost = yes ? m : 1 - m;
+      const b = (1 - cost) / cost; // net odds: win (1 - cost) per cost staked
+      const fStar = Math.max(0, (w * b - (1 - w)) / b);
+      const g = (f: number) => w * Math.log(1 + f * b) + (1 - w) * Math.log(1 - f);
+      const f = Math.min(0.999, k * fStar);
+
+      out('side').textContent = yes ? 'Buy YES' : 'Buy NO';
+      const e = out('edge');
+      e.textContent = `${p - m >= 0 ? '+' : '−'}${fmt.pct(Math.abs(p - m), 1)}`;
+      e.className = 'v ' + (Math.abs(p - m) > 0 ? 'pos' : '');
+      out('f').textContent = fmt.pct(fStar, 1);
+      out('stake').textContent = fmt.usd(f * B, 0);
+      out('g').textContent = fStar > 0 ? `${(100 * g(f)).toFixed(3)}%` : '0% (no edge)';
+      out('pl').textContent = fmt.pct(1 - w, 0);
+
+      clear(svg);
+      const box = { left: 46, right: 350, top: 12, bottom: 196 };
+      const fMax = Math.min(1, Math.max(0.3, fStar * 1.6 + 0.05));
+      const gs: number[] = [];
+      const pts: [number, number][] = [];
+      const gMax = fStar > 0 ? g(fStar) : 0.01;
+      const gMin = Math.min(-gMax * 1.5, g(Math.min(0.99, fMax)));
+      const sx = scale(0, fMax, box.left, box.right);
+      const sy = scale(gMin, gMax * 1.15, box.bottom, box.top);
+      const gg = el('g');
+      axes(gg, sx, sy, [0, fMax], [gMin, gMax * 1.15], box, (v) => fmt.pct(v, 0), (v) => fmt.pct(v, 1));
+      svg.appendChild(gg);
+      for (let i = 0; i <= 120; i++) {
+        const ff = (i / 120) * fMax;
+        if (ff >= 1) break;
+        const gv = g(ff);
+        gs.push(gv);
+        pts.push([sx(ff), sy(Math.max(gMin, gv))]);
+      }
+      svg.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(0), y2: sy(0), stroke: 'var(--muted)', 'stroke-dasharray': '3 3' }));
+      svg.appendChild(el('path', { d: path(pts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2.5 }));
+      if (fStar > 0) {
+        svg.appendChild(el('line', { x1: sx(fStar), x2: sx(fStar), y1: box.top, y2: box.bottom, stroke: 'var(--text)', 'stroke-width': 1.5 }));
+        svg.appendChild(el('line', { x1: sx(f), x2: sx(f), y1: box.top, y2: box.bottom, stroke: 'var(--c2)', 'stroke-width': 2, 'stroke-dasharray': '5 3' }));
+      }
+      svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 222, class: 'lbl muted', 'text-anchor': 'middle' }, 'fraction of bankroll wagered'));
+    };
+    ['m', 'p', 'b', 'k'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="kelly"]').forEach(init);
+</script>

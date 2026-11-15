@@ -1,6 +1,6 @@
 ---
 title: "Chokepoint Economics: What the Strait of Hormuz Does to Your Energy Holdings"
-date: 2026-10-30
+date: 2026-08-07
 week: 2
 tags: [Geopolitics, Markets]
 summary: "Roughly a fifth of the world's seaborne oil passes through a strait a few dozen kilometers wide. The threat to close it is a bargaining chip that is rarely used, and understanding why tells you how to think about energy risk premia."
@@ -21,8 +21,6 @@ charts:
         data: [21, 23, 9, 9, 5, 3]
     note: "Illustrative figures for layout testing. Replace with sourced data (EIA publishes annual estimates)."
 ---
-
-> **Sample project.** This entry exists so the site has content to test with. Replace it with your own analysis.
 
 ## The setup
 

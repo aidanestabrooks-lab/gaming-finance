@@ -1,0 +1,60 @@
+---
+title: "Negative Convexity: Why Your Callable Bonds Won't Rally"
+date: 2026-09-18
+week: 8
+tags: [CFA, Markets]
+summary: "When rates fall, callable bonds and agency mortgage-backed securities rally less than their duration says they should, because the issuer's option to refinance is worth more. A calibrated binomial interest rate tree makes the option visible, solves the option-adjusted spread, and measures the effective duration and convexity that a cutting cycle actually delivers."
+takeaways:
+  - "A callable bond is an option-free bond minus a call option. Everything that raises the option's value (lower rates, higher volatility) lowers the bond's price relative to a straight bond."
+  - "Effective duration, not modified duration, is the right measure when cash flows depend on rates. For a callable near its call price, effective duration can fall by half as rates drop."
+  - "Negative convexity means the bond gains less when yields fall than it loses when they rise. In a cutting cycle that is a direct cost to holders of callables and MBS."
+  - "The option-adjusted spread strips out the option. Compare OAS, not nominal spread, when deciding whether a callable is cheap."
+sources:
+  - title: "CFA Institute: Valuation and Analysis of Bonds with Embedded Options (Level II)"
+    url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/valuation-analysis-bonds-embedded-options
+  - title: "Federal Reserve Bank of New York: Agency MBS operations"
+    url: https://www.newyorkfed.org/markets/domestic-market-operations/monetary-policy-implementation/agency-mortgage-backed-securities
+---
+import RateTree from '../../components/models/RateTree.astro';
+
+## The setup
+
+A corporate borrower issued a five-year bond with a 5% coupon when rates were higher. It is callable at par starting next year. The curve has since rallied. The borrower would love to refinance, and every holder of that bond is now short the option that lets them do it.
+
+The Level II toolkit for this is the **binomial interest rate tree**. Build a lattice of one-year forward rates that reprices today's par curve, assume rates move up or down each year with lognormal volatility, and price the bond by rolling back through the tree. At each node where the issuer can call, replace the bond's value with the lower of its value and the call price. The difference between the straight bond and the callable bond is the value of the call.
+
+<RateTree id="callable" note="Five-year annual tree, calibrated to a linear par curve between the 1-year and 5-year rates. Lognormal rates, equal up/down probabilities." />
+
+## Calibration
+
+The lowest rate at each year is solved so that a par bond of that maturity prices at exactly 100 on the tree; the other nodes are $r_{t,i} = r_{t,0}\, e^{2\sigma i}$. That is the Level II construction, and it guarantees the tree is arbitrage-free against the inputs. Raise the volatility slider and watch the nodes fan out while the calibrated par bonds still price at par: the tree's *center* adjusts so the expectation is unchanged.
+
+## Pricing the call
+
+At each node from the first call date forward:
+
+$$
+V_{t,i} = \min\!\left( \frac{\tfrac{1}{2}\,(V_{t+1,i} + V_{t+1,i+1})}{1 + r_{t,i} + \text{OAS}},\; \text{Call price} \right) + \text{Coupon}
+$$
+
+The option is exercised in the low-rate states, which are exactly the states where an option-free bond would be worth the most. That asymmetry is negative convexity in one line.
+
+## OAS, effective duration, effective convexity
+
+Give the model a market price and it solves, by bisection, for the constant spread added to every node that makes the tree price match. That spread is the **option-adjusted spread**: the compensation you earn for credit and liquidity *after* the option has been paid for. Two callables with different coupons can have very different nominal spreads and the same OAS.
+
+Effective duration and convexity are computed the only way that makes sense for a rate-dependent cash flow: shift the entire par curve up and down, rebuild the tree each time, reprice at constant OAS, and difference:
+
+$$
+D_{\text{eff}} = \frac{P_{-} - P_{+}}{2\,P_0\,\Delta y}, \qquad C_{\text{eff}} = \frac{P_{-} + P_{+} - 2P_0}{P_0\,(\Delta y)^2}
+$$
+
+With the default inputs, the callable's effective duration is well below the straight bond's and its effective convexity is negative. Drag the 5-year rate down 100 basis points and the duration falls further: the bond is converging on its call price and has stopped behaving like a bond.
+
+## The price-yield chart
+
+The right-hand chart reprices both bonds across a −200 to +200 basis point parallel shift. The straight bond curves upward (positive convexity). The callable flattens into the call price as yields fall. The gap between the two curves at any shift is the call option's value at that level of rates.
+
+## What this means for investors
+
+Agency MBS, callable agencies, and most callable corporates and preferreds carry this profile. In a cutting cycle, the holder of a callable gets a smaller rally, a shorter duration, and an elevated chance of being handed cash to reinvest at lower yields. The OAS tells you whether you are being paid for it. If the OAS on a callable is not meaningfully wider than on a comparable straight bond, you are giving the option away.

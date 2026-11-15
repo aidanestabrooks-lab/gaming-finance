@@ -1,0 +1,79 @@
+---
+/**
+ * Extensive-form game solved by backward induction. Supports chance ("Nature")
+ * nodes with probabilities. Several named scenarios can be supplied; buttons
+ * switch between them and the tree is re-solved and redrawn.
+ */
+import type { TreeNode } from '../../lib/tree';
+interface Props {
+  id: string;
+  players: string[];
+  scenarios: { name: string; tree: TreeNode }[];
+  title?: string;
+  note?: string;
+}
+const { id, players, scenarios, title = 'Backward induction', note } = Astro.props;
+---
+
+<div class="model" data-model="tree" id={id} data-players={JSON.stringify(players)} data-scenarios={JSON.stringify(scenarios)}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    {note && <p class="model-note">{note}</p>}
+  </div>
+  {
+    scenarios.length > 1 && (
+      <div class="btn-row">
+        {scenarios.map((s, i) => (
+          <button type="button" class="btn ghost small" data-scn={i} aria-pressed={i === 0 ? 'true' : 'false'}>
+            {s.name}
+          </button>
+        ))}
+      </div>
+    )
+  }
+  <div class="legend">
+    {players.map((p, i) => <span><i style={`background: var(--c${i + 1})`}></i>{p}</span>)}
+    <span><i style="background: var(--c6)"></i>Nature (chance)</span>
+    <span><i style="background: var(--text); height: 3px"></i>Equilibrium path</span>
+  </div>
+  <div class="table-scroll">
+    <svg class="tree" role="img" aria-label="Game tree"></svg>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Nodes solved</div><div class="v" data-out="n">–</div></div>
+    <div class="stat"><div class="k">Equilibrium path</div><div class="v" data-out="path" style="font-size: 0.95rem">–</div></div>
+    <div class="stat"><div class="k">Equilibrium payoffs</div><div class="v" data-out="pay">–</div></div>
+  </div>
+</div>
+
+<style>
+  .tree {
+    min-width: 720px;
+  }
+</style>
+
+<script>
+  import { solve, markPath, layout, draw, pathText, type TreeNode } from '../../lib/tree';
+
+  function init(root: HTMLElement) {
+    const players = JSON.parse(root.dataset.players!) as string[];
+    const scenarios = JSON.parse(root.dataset.scenarios!) as { name: string; tree: TreeNode }[];
+    const svg = root.querySelector<SVGSVGElement>('svg.tree')!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const show = (i: number) => {
+      const stats = { nodes: 0 };
+      const solved = solve(scenarios[i].tree, players, 0, stats);
+      markPath(solved);
+      layout(solved, 0);
+      draw(svg, solved, players);
+      out('n').textContent = String(stats.nodes);
+      out('path').textContent = pathText(solved);
+      out('pay').textContent = `(${solved.value.map((v) => v.toFixed(2)).join(', ')})`;
+      root.querySelectorAll<HTMLButtonElement>('[data-scn]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.scn! === i)));
+    };
+    root.querySelectorAll<HTMLButtonElement>('[data-scn]').forEach((b) => b.addEventListener('click', () => show(+b.dataset.scn!)));
+    show(0);
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="tree"]').forEach(init);
+</script>

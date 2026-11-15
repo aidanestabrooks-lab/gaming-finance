@@ -1,0 +1,157 @@
+---
+/**
+ * Liability-driven investing (CFA Level III fixed income). A pension-style
+ * liability stream is immunized two ways: a bullet bond near the liability
+ * duration, and a barbell of short and long bonds solved to match PV and
+ * duration. Both are then stressed with a parallel shift and a twist. The
+ * barbell has more convexity but more dispersion, so it wins on parallel
+ * shifts and loses on twists: structural risk made visible.
+ */
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+}
+const { id, title = 'Immunization: bullet vs barbell under shifts and twists', note } = Astro.props;
+---
+
+<div class="model" data-model="ldi" id={id}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    {note && <p class="model-note">{note}</p>}
+  </div>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Annual benefit payment</span><output data-o="pay">$100M</output></span><input type="range" min="10" max="500" step="10" value="100" data-in="pay" /></label>
+    <label class="ctl"><span class="lab"><span>Payments start (year)</span><output data-o="t0">5</output></span><input type="range" min="1" max="15" step="1" value="5" data-in="t0" /></label>
+    <label class="ctl"><span class="lab"><span>Payments end (year)</span><output data-o="t1">20</output></span><input type="range" min="5" max="30" step="1" value="20" data-in="t1" /></label>
+    <label class="ctl"><span class="lab"><span>Flat yield (annual)</span><output data-o="y">4.5%</output></span><input type="range" min="0.01" max="0.09" step="0.0025" value="0.045" data-in="y" /></label>
+    <label class="ctl"><span class="lab"><span>Barbell: short bond maturity</span><output data-o="ms">2</output></span><input type="range" min="1" max="8" step="1" value="2" data-in="ms" /></label>
+    <label class="ctl"><span class="lab"><span>Barbell: long bond maturity</span><output data-o="ml">30</output></span><input type="range" min="15" max="30" step="1" value="30" data-in="ml" /></label>
+    <label class="ctl"><span class="lab"><span>Stress: parallel shift (bp)</span><output data-o="sh">0</output></span><input type="range" min="-300" max="300" step="10" value="0" data-in="sh" /></label>
+    <label class="ctl"><span class="lab"><span>Stress: twist (bp per 10 yrs of maturity)</span><output data-o="tw">0</output></span><input type="range" min="-150" max="150" step="5" value="0" data-in="tw" /></label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Liability PV</div><div class="v" data-out="lpv">–</div></div>
+    <div class="stat"><div class="k">Liability Macaulay duration</div><div class="v" data-out="ld">–</div></div>
+    <div class="stat"><div class="k">Liability convexity</div><div class="v" data-out="lc">–</div></div>
+    <div class="stat"><div class="k">Bullet: maturity / convexity</div><div class="v" data-out="bul">–</div></div>
+    <div class="stat"><div class="k">Barbell weights (short / long)</div><div class="v" data-out="bar">–</div><div class="k" data-out="barc">–</div></div>
+    <div class="stat"><div class="k">Convexity gap: barbell − liability</div><div class="v" data-out="gap">–</div></div>
+  </div>
+  <div class="two-col">
+    <div>
+      <p class="readout">Surplus after the stress you dialed in (assets − liabilities, $M).</p>
+      <div class="stats" style="grid-template-columns: 1fr 1fr">
+        <div class="stat"><div class="k">Bullet surplus</div><div class="v" data-out="sb">–</div></div>
+        <div class="stat"><div class="k">Barbell surplus</div><div class="v" data-out="sbb">–</div></div>
+      </div>
+      <svg class="twist" viewBox="0 0 360 220" role="img" aria-label="Surplus against twist"></svg>
+      <div class="legend"><span><i style="background: var(--c1)"></i>Bullet</span><span><i style="background: var(--c2)"></i>Barbell</span><span>surplus vs twist, at the chosen parallel shift</span></div>
+    </div>
+    <div>
+      <svg class="par" viewBox="0 0 360 220" role="img" aria-label="Surplus against parallel shift"></svg>
+      <div class="legend"><span><i style="background: var(--c1)"></i>Bullet</span><span><i style="background: var(--c2)"></i>Barbell</span><span>surplus vs parallel shift, at the chosen twist</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { fmt } from '../../lib/stats';
+  import { el, clear, axes, path, scale } from '../../lib/svg';
+
+  interface CF { t: number; cf: number }
+  /** Yield applying to a cash flow at time t under a shift and a twist pivoting at `pivot`. */
+  const yAt = (y: number, t: number, shift: number, twist: number, pivot: number) => y + shift + (twist * (t - pivot)) / 10;
+  function pv(cfs: CF[], y: number, shift = 0, twist = 0, pivot = 0) {
+    let p = 0, d = 0, c = 0;
+    for (const { t, cf } of cfs) {
+      const yy = yAt(y, t, shift, twist, pivot);
+      const df = Math.pow(1 + yy, -t);
+      p += cf * df; d += t * cf * df; c += t * (t + 1) * cf * df;
+    }
+    const dur = d / p;
+    const conv = c / (p * Math.pow(1 + y, 2));
+    return { pv: p, dur, conv };
+  }
+  /** Par coupon bond paying annually, face 100. */
+  const bond = (m: number, cpn: number): CF[] => Array.from({ length: m }, (_, i) => ({ t: i + 1, cf: 100 * cpn + (i + 1 === m ? 100 : 0) }));
+
+  function init(root: HTMLElement) {
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const twistSvg = root.querySelector<SVGSVGElement>('svg.twist')!;
+    const parSvg = root.querySelector<SVGSVGElement>('svg.par')!;
+
+    const update = () => {
+      const pay = +q('pay').value, t0 = +q('t0').value, t1 = Math.max(+q('t1').value, t0 + 1), y = +q('y').value;
+      const ms = +q('ms').value, ml = +q('ml').value, sh = +q('sh').value / 10000, tw = +q('tw').value / 10000;
+      o('pay').textContent = `$${pay}M`; o('t0').textContent = String(t0); o('t1').textContent = String(t1); o('y').textContent = fmt.pct(y, 2);
+      o('ms').textContent = String(ms); o('ml').textContent = String(ml); o('sh').textContent = String(Math.round(sh * 10000)); o('tw').textContent = String(Math.round(tw * 10000));
+
+      const L: CF[] = Array.from({ length: t1 - t0 + 1 }, (_, i) => ({ t: t0 + i, cf: pay }));
+      const l0 = pv(L, y);
+      out('lpv').textContent = `$${l0.pv.toFixed(0)}M`;
+      out('ld').textContent = `${l0.dur.toFixed(2)} yrs`;
+      out('lc').textContent = l0.conv.toFixed(1);
+      const pivot = l0.dur;
+
+      // Bullet: single par bond with maturity nearest the liability duration (Macaulay duration of a par bond < maturity, so pick maturity by search).
+      let bm = 1, best = Infinity;
+      for (let m = 1; m <= 30; m++) {
+        const d = pv(bond(m, y), y).dur;
+        if (Math.abs(d - l0.dur) < best) { best = Math.abs(d - l0.dur); bm = m; }
+      }
+      const bulletCF = bond(bm, y);
+      const b0 = pv(bulletCF, y);
+      const bulletUnits = l0.pv / b0.pv;
+      out('bul').textContent = `${bm} yrs / ${b0.conv.toFixed(1)}`;
+
+      // Barbell: weights x_s, x_l on short and long par bonds s.t. PV match and duration match.
+      const sCF = bond(ms, y), lCF = bond(ml, y);
+      const s0 = pv(sCF, y), lo0 = pv(lCF, y);
+      const wl = (l0.dur - s0.dur) / (lo0.dur - s0.dur);
+      const wsh = 1 - wl;
+      const barConv = wsh * s0.conv + wl * lo0.conv;
+      out('bar').textContent = `${fmt.pct(wsh, 1)} / ${fmt.pct(wl, 1)}`;
+      out('barc').textContent = `convexity ${barConv.toFixed(1)}`;
+      const ge = out('gap');
+      ge.textContent = (barConv - l0.conv).toFixed(1);
+      ge.className = 'v ' + (barConv - l0.conv > 0 ? 'pos' : 'neg');
+      const sUnits = (wsh * l0.pv) / s0.pv, lUnits = (wl * l0.pv) / lo0.pv;
+
+      const surplus = (shift: number, twist: number) => {
+        const liab = pv(L, y, shift, twist, pivot).pv;
+        const bul = bulletUnits * pv(bulletCF, y, shift, twist, pivot).pv;
+        const bar = sUnits * pv(sCF, y, shift, twist, pivot).pv + lUnits * pv(lCF, y, shift, twist, pivot).pv;
+        return { bul: bul - liab, bar: bar - liab };
+      };
+      const s = surplus(sh, tw);
+      const setS = (k: string, v: number) => { const e = out(k); e.textContent = `${v >= 0 ? '+' : '−'}$${Math.abs(v).toFixed(1)}M`; e.className = 'v ' + (v >= 0 ? 'pos' : 'neg'); };
+      setS('sb', s.bul); setS('sbb', s.bar);
+
+      const drawCurve = (svg: SVGSVGElement, xs: number[], f: (x: number) => { bul: number; bar: number }, xl: string) => {
+        clear(svg);
+        const vals = xs.map(f);
+        const lo = Math.min(0, ...vals.map((v) => Math.min(v.bul, v.bar))) * 1.15 - 1, hi = Math.max(0, ...vals.map((v) => Math.max(v.bul, v.bar))) * 1.15 + 1;
+        const box = { left: 50, right: 350, top: 10, bottom: 180 };
+        const sx = scale(xs[0], xs[xs.length - 1], box.left, box.right), sy = scale(lo, hi, box.bottom, box.top);
+        const g = el('g');
+        axes(g, sx, sy, [xs[0], xs[xs.length - 1]], [lo, hi], box, (v) => String(v), (v) => v.toFixed(0));
+        svg.appendChild(g);
+        svg.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(0), y2: sy(0), stroke: 'var(--muted)', 'stroke-dasharray': '3 3' }));
+        svg.appendChild(el('path', { d: path(xs.map((x, i) => [sx(x), sy(vals[i].bul)])), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2.5 }));
+        svg.appendChild(el('path', { d: path(xs.map((x, i) => [sx(x), sy(vals[i].bar)])), fill: 'none', stroke: 'var(--c2)', 'stroke-width': 2.5 }));
+        svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 212, class: 'lbl muted', 'text-anchor': 'middle' }, xl));
+      };
+      const tws: number[] = []; for (let b = -150; b <= 150; b += 10) tws.push(b);
+      drawCurve(twistSvg, tws, (b) => surplus(sh, b / 10000), 'twist (bp per 10 yrs of maturity)');
+      const shs: number[] = []; for (let b = -300; b <= 300; b += 20) shs.push(b);
+      drawCurve(parSvg, shs, (b) => surplus(b / 10000, tw), 'parallel shift (bp)');
+    };
+    ['pay', 't0', 't1', 'y', 'ms', 'ml', 'sh', 'tw'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="ldi"]').forEach(init);
+</script>

@@ -1,0 +1,147 @@
+---
+/**
+ * Multi-outcome "Dutch book" scanner for a set of mutually exclusive, exhaustive
+ * event contracts (e.g. the buckets of a "where will the Fed funds rate be" market).
+ * Prices in cents. Fees follow Kalshi's published quadratic schedule:
+ * fee = ceil(rate x C x P x (1 - P)) in cents, per order.
+ */
+interface Props {
+  id: string;
+  market: string;
+  buckets: { label: string; yes: number }[];
+  title?: string;
+  note?: string;
+}
+const { id, market, buckets, title = 'Bucket arbitrage scanner', note } = Astro.props;
+---
+
+<div class="model" data-model="bucket" id={id}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    <p class="model-note">{note ?? market}</p>
+  </div>
+  <div class="controls">
+    <label class="ctl">
+      <span class="lab"><span>Contracts per bucket (C)</span><output data-o="c">100</output></span>
+      <input type="range" min="1" max="1000" step="1" value="100" data-in="c" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>Fee schedule</span></span>
+      <select data-in="fee">
+        <option value="0.07" selected>Kalshi taker: 7% × P(1−P)</option>
+        <option value="0.0175">Kalshi maker: 1.75% × P(1−P)</option>
+        <option value="0">No fees (theoretical)</option>
+      </select>
+    </label>
+  </div>
+  <div class="two-col">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr><th>Bucket</th><th>YES ask (¢)</th><th>NO ask (¢)</th><th>Fee / contract</th></tr>
+        </thead>
+        <tbody>
+          {
+            buckets.map((b, i) => (
+              <tr>
+                <td>{b.label}</td>
+                <td><input type="number" min="1" max="99" step="1" value={b.yes} data-b={i} aria-label={`YES price for ${b.label}`} /></td>
+                <td data-no={i}>–</td>
+                <td data-fee={i}>–</td>
+              </tr>
+            ))
+          }
+        </tbody>
+        <tfoot>
+          <tr><th>Sum of YES prices</th><th data-out="sumyes">–</th><th data-out="sumno">–</th><th data-out="sumfee">–</th></tr>
+        </tfoot>
+      </table>
+    </div>
+    <div>
+      <svg class="bar" viewBox="0 0 360 120" role="img" aria-label="Sum of YES prices against one dollar"></svg>
+      <div class="stats">
+        <div class="stat"><div class="k">Buy YES on every bucket</div><div class="v" data-out="yesP">–</div><div class="k" data-out="yesD">–</div></div>
+        <div class="stat"><div class="k">Buy NO on every bucket</div><div class="v" data-out="noP">–</div><div class="k" data-out="noD">–</div></div>
+        <div class="stat"><div class="k">Verdict</div><div class="v" data-out="verdict" style="font-size: 0.95rem">–</div></div>
+        <div class="stat"><div class="k">Fee-free band for ΣYES</div><div class="v" data-out="band" style="font-size: 0.95rem">–</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import { el, clear } from '../../lib/svg';
+  import { fmt } from '../../lib/stats';
+
+  // Kalshi rounds the fee on each order up to the next cent.
+  const orderFee = (rate: number, C: number, P: number) => Math.ceil(100 * rate * C * P * (1 - P)) / 100;
+
+  function init(root: HTMLElement) {
+    const inputs = Array.from(root.querySelectorAll<HTMLInputElement>('input[data-b]'));
+    const cIn = root.querySelector<HTMLInputElement>('[data-in="c"]')!;
+    const feeIn = root.querySelector<HTMLSelectElement>('[data-in="fee"]')!;
+    const svg = root.querySelector<SVGSVGElement>('svg.bar')!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+
+    const update = () => {
+      const C = +cIn.value;
+      const rate = +feeIn.value;
+      root.querySelector<HTMLElement>('[data-o="c"]')!.textContent = String(C);
+      const P = inputs.map((i) => Math.min(99, Math.max(1, +i.value || 1)) / 100);
+      const N = P.length;
+      let sumYes = 0, sumNo = 0, feeYes = 0, feeNo = 0;
+      P.forEach((p, i) => {
+        const fy = orderFee(rate, C, p);
+        const fn = orderFee(rate, C, 1 - p);
+        sumYes += p; sumNo += 1 - p; feeYes += fy; feeNo += fn;
+        root.querySelector<HTMLElement>(`[data-no="${i}"]`)!.textContent = fmt.cents(1 - p);
+        root.querySelector<HTMLElement>(`[data-fee="${i}"]`)!.textContent = fmt.usd(fy / C, 4);
+      });
+      out('sumyes').textContent = fmt.cents(sumYes);
+      out('sumno').textContent = fmt.cents(sumNo);
+      out('sumfee').textContent = fmt.usd(feeYes);
+
+      // Buy all YES: cost = C * sumYes + fees; exactly one bucket pays C.
+      const yesCost = C * sumYes + feeYes;
+      const yesProfit = C - yesCost;
+      // Buy all NO: cost = C * sumNo + fees; N-1 buckets pay C each.
+      const noCost = C * sumNo + feeNo;
+      const noProfit = C * (N - 1) - noCost;
+
+      const set = (k: string, v: number, cost: number) => {
+        const e = out(k);
+        e.textContent = `${v >= 0 ? '+' : '−'}${fmt.usd(Math.abs(v))}`;
+        e.className = 'v ' + (v > 0 ? 'pos' : v < 0 ? 'neg' : '');
+        out(k.replace('P', 'D')).textContent = `on ${fmt.usd(cost)} deployed · ${fmt.pct(v / cost, 2)}`;
+      };
+      set('yesP', yesProfit, yesCost);
+      set('noP', noProfit, noCost);
+
+      const v = out('verdict');
+      if (yesProfit > 0) { v.textContent = 'Underround: buy every YES, lock in profit'; v.className = 'v pos'; }
+      else if (noProfit > 0) { v.textContent = 'Overround: buy every NO, lock in profit'; v.className = 'v pos'; }
+      else { v.textContent = 'No risk-free trade after fees'; v.className = 'v'; }
+      out('band').textContent = `${fmt.cents(1 - feeYes / C)} to ${fmt.cents(1 + feeNo / C)}`;
+
+      // Bar: stacked YES prices vs $1.
+      clear(svg);
+      const L = 10, R = 350, y = 40, h = 28;
+      const scaleMax = Math.max(1.2, sumYes + 0.05);
+      const sx = (d: number) => L + (d / scaleMax) * (R - L);
+      let x = 0;
+      P.forEach((p, i) => {
+        svg.appendChild(el('rect', { x: sx(x), y, width: Math.max(0, sx(x + p) - sx(x) - 1), height: h, fill: `var(--c${(i % 6) + 1})`, opacity: 0.9 }));
+        x += p;
+      });
+      svg.appendChild(el('line', { x1: sx(1), x2: sx(1), y1: y - 12, y2: y + h + 12, stroke: 'var(--text)', 'stroke-width': 2, 'stroke-dasharray': '4 3' }));
+      svg.appendChild(el('text', { x: sx(1), y: y - 16, class: 'lbl', 'text-anchor': 'middle' }, '$1.00 payout'));
+      svg.appendChild(el('text', { x: sx(sumYes), y: y + h + 26, class: 'lbl mono', 'text-anchor': 'middle' }, `ΣYES = ${fmt.cents(sumYes)}`));
+      svg.appendChild(el('text', { x: L, y: y + h + 44, class: 'tick' }, 'Each block is one bucket’s YES price'));
+    };
+
+    [...inputs, cIn, feeIn].forEach((i) => i.addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="bucket"]').forEach(init);
+</script>

@@ -1,0 +1,86 @@
+---
+title: "The Fed Moves First: Backward Induction on the Cutting Cycle"
+date: 2026-09-11
+week: 7
+tags: [Game Theory, Markets]
+summary: "The Fed sets the rate, the data arrive, the market positions. That is a sequential game with a chance node in the middle, and it is solved from the end backward. The tree below rolls back three scenarios for inflation risk and shows when a bigger cut is the equilibrium and when it is a trap."
+takeaways:
+  - "Solve sequential games from the last move backward. The first mover's best choice depends on how every later player will respond, including Nature."
+  - "A chance node turns the market's payoff into an expectation. Small changes in the probability of re-accelerating inflation can flip the Fed's equilibrium move from 50 to 25."
+  - "The market's dominant strategy under most scenarios is to extend duration after the first cut. The Fed knows that, and it is part of why it cuts cautiously."
+  - "Backward induction assumes everyone is rational and everyone knows the tree. The mispricings come when the market thinks the Fed is playing a different tree."
+sources:
+  - title: "Federal Reserve: FOMC statements and projections"
+    url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
+  - title: "Selten, R. (1965). Spieltheoretische Behandlung eines Oligopolmodells (subgame perfection)"
+    url: https://www.jstor.org/stable/40748884
+---
+import GameTree from '../../components/models/GameTree.astro';
+
+export const fed = (p) => ({
+  player: 'Fed',
+  actions: [
+    { label: 'Cut 50', node: { player: 'Nature', actions: [
+      { label: 'Inflation re-accelerates', prob: p, node: { player: 'Market', actions: [
+        { label: 'Extend duration', node: { payoffs: [-4, -3] } },
+        { label: 'Stay short', node: { payoffs: [-3, 1] } } ] } },
+      { label: 'Inflation contained', prob: +(1 - p).toFixed(2), node: { player: 'Market', actions: [
+        { label: 'Extend duration', node: { payoffs: [3, 4] } },
+        { label: 'Stay short', node: { payoffs: [2, 0] } } ] } } ] } },
+    { label: 'Cut 25', node: { player: 'Nature', actions: [
+      { label: 'Inflation re-accelerates', prob: +(p * 0.6).toFixed(2), node: { player: 'Market', actions: [
+        { label: 'Extend duration', node: { payoffs: [-1, -1] } },
+        { label: 'Stay short', node: { payoffs: [0, 1] } } ] } },
+      { label: 'Inflation contained', prob: +(1 - p * 0.6).toFixed(2), node: { player: 'Market', actions: [
+        { label: 'Extend duration', node: { payoffs: [2, 2] } },
+        { label: 'Stay short', node: { payoffs: [1, 0] } } ] } } ] } },
+    { label: 'Hold', node: { player: 'Nature', actions: [
+      { label: 'Labor market cracks', prob: +(0.5 - p * 0.5).toFixed(2), node: { player: 'Market', actions: [
+        { label: 'Extend duration', node: { payoffs: [-3, 2] } },
+        { label: 'Stay short', node: { payoffs: [-2, -1] } } ] } },
+      { label: 'Soft landing holds', prob: +(0.5 + p * 0.5).toFixed(2), node: { player: 'Market', actions: [
+        { label: 'Extend duration', node: { payoffs: [1, 1] } },
+        { label: 'Stay short', node: { payoffs: [1, 0] } } ] } } ] } },
+  ],
+});
+
+export const scenarios = [
+  { name: 'Baseline (p = 0.25)', tree: fed(0.25) },
+  { name: 'Sticky inflation (p = 0.50)', tree: fed(0.5) },
+  { name: 'Labor cracking (p = 0.10)', tree: fed(0.1) },
+];
+
+## The setup
+
+Three players. The **Fed** moves first and chooses the size of a cut. **Nature** then draws the next quarter's data: inflation either re-accelerates (probability $p$) or stays contained. The **market** moves last and decides whether to extend duration or stay short. Payoffs are (Fed, Market) in arbitrary welfare units.
+
+The Fed's payoff rewards getting the economy to a soft landing and punishes a policy error in either direction. The market's payoff is its mark-to-market: long duration pays when inflation is contained and the Fed keeps easing, and bleeds when inflation returns.
+
+<GameTree
+  id="fed"
+  players={['Fed', 'Market']}
+  scenarios={scenarios}
+  note="Payoffs (Fed, Market). Click a scenario to re-solve. Hover a node for its rollback value."
+/>
+
+## How backward induction works
+
+Start at the terminal nodes. At each market node, the market picks the action with the higher market payoff. Replace the node with the payoff pair of that choice. At each Nature node, take the probability-weighted average of the children. Finally, at the Fed's node, choose the branch whose rolled-back Fed payoff is highest. The dark path is the subgame-perfect equilibrium, meaning it is optimal at every node, not just at the start.
+
+The expected value at a Nature node is
+
+$$
+\mathbb{E}[u] = p \cdot u(\text{re-accelerate}) + (1-p) \cdot u(\text{contained})
+$$
+
+with the market's optimal response already substituted in at each branch. The Fed is therefore choosing among three expectations, each of which already assumes the market will respond rationally.
+
+## Reading the three scenarios
+
+In the baseline, the larger cut rolls back to a higher Fed payoff because the contained-inflation branch is likely enough that its payoff dominates. Switch to "sticky inflation": the probability on the bad branch doubles, the expected value of the 50 cut collapses, and the equilibrium drops to 25. Switch to "labor cracking": holding becomes dangerous because the probability that the labor market breaks under a hold rises, and 50 is back.
+
+Notice the market's choice almost never changes. Under most branches, extending duration after a cut is the market's best response. The Fed knows this. A large cut followed by a duration rally is baked into the tree, which is part of why the Fed treats the size of the first cut as a signal and not merely a rate.
+
+## What this means for investors
+
+Your edge is not in the terminal payoffs, which everyone roughly agrees on. It is in $p$. The probability of re-acceleration is the one number that flips the equilibrium, and it moves with every inflation print. Position for the *equilibrium path under your* $p$, and compare it with the path the market is pricing. When they differ, you have a trade with a reason.

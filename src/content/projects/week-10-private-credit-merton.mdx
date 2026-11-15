@@ -1,0 +1,57 @@
+---
+title: "Private Credit Through the Merton Lens"
+date: 2026-10-02
+week: 10
+tags: [CFA, Firms]
+summary: "Equity is a call option on the firm's assets struck at the face value of its debt. That one idea gives you a default probability, a credit spread, and an explanation of why levered borrowers take more risk when things go wrong. The model below is the Level II structural credit model, live, with the spread-versus-leverage curve that private credit lenders are pricing against."
+takeaways:
+  - "In the Merton model, the credit spread is a function of just three things: leverage, asset volatility, and time. Everything else is a label."
+  - "Equity delta is the shareholders' incentive to add risk. As leverage rises and delta falls below one, equity holders gain from volatility that debt holders pay for. That is asset substitution, and covenants exist because of it."
+  - "Risk-neutral default probability overstates real-world default frequency. Use N(−d2) for pricing and the real-world distance to default for forecasting."
+  - "Private credit spreads that look generous against public high yield should be checked against the volatility of the underlying assets, not the headline leverage alone."
+sources:
+  - title: "CFA Institute: Credit Analysis Models (Level II fixed income)"
+    url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/credit-analysis-models
+  - title: "Merton, R. C. (1974). On the pricing of corporate debt: the risk structure of interest rates"
+    url: https://www.jstor.org/stable/2978814
+  - title: "Federal Reserve: Financial Stability Report"
+    url: https://www.federalreserve.gov/publications/financial-stability-report.htm
+---
+import MertonModel from '../../components/models/MertonModel.astro';
+
+## The setup
+
+A middle-market company has assets worth $V$ and owes a single zero-coupon debt of face $D$ due at $T$. At maturity, shareholders pay the debt if $V_T > D$ and keep $V_T - D$; otherwise they walk away and the lenders take the assets. Shareholders therefore hold a call on $V$ with strike $D$:
+
+$$
+E = V\,N(d_1) - D e^{-rT} N(d_2), \qquad
+d_1 = \frac{\ln(V/D) + (r + \tfrac{1}{2}\sigma_A^2)\,T}{\sigma_A\sqrt{T}}, \quad d_2 = d_1 - \sigma_A\sqrt{T}
+$$
+
+The debt is worth $V - E$. Its yield is $y = -\ln(B/D)/T$, and the credit spread is $y - r$. The risk-neutral probability of default is $N(-d_2)$.
+
+<MertonModel id="merton" note="Illustrative middle-market borrower. $ millions. The curve chart holds T and r fixed at the slider values." />
+
+## Reading the outputs
+
+**Spread versus leverage.** The three curves plot the implied spread against the ratio of the present value of debt to asset value, for asset volatilities of 15%, 25% and 40%. Two things stand out. First, the curves are convex: spread is nearly flat at low leverage and explodes past a threshold. Second, the volatility curves are far apart. At the same leverage, a borrower whose assets are twice as volatile can carry several times the spread. Private credit underwriting that focuses on leverage multiples and ignores asset volatility is reading the wrong axis.
+
+**Distance to default.** The risk-neutral $d_2$ discounts at the risk-free rate because it is built for pricing. For forecasting defaults you want the real-world version, which replaces $r$ with the expected asset return $\mu$:
+
+$$
+\text{DD} = \frac{\ln(V/D) + (\mu - \tfrac{1}{2}\sigma_A^2)\,T}{\sigma_A\sqrt{T}}
+$$
+
+The model shows both. The real-world default probability is lower than the risk-neutral one whenever $\mu > r$, which is the normal case, and the gap is the credit risk premium.
+
+**Equity delta.** $\partial E/\partial V = N(d_1)$. At low leverage delta is near one: shareholders own the assets in all but name. As leverage rises, delta falls, and shareholders become option holders. Option holders like volatility. That is why a distressed borrower's management will take the long-shot acquisition or the risky pivot: equity gains from the upside, debt absorbs the downside. Covenants, collateral, and lender step-in rights are the mechanism design that pushes back.
+
+**Equity volatility.** The identity $\sigma_E = N(d_1)\,V\sigma_A / E$ links the unobservable asset volatility to the observable equity volatility. In practice, that is how $V$ and $\sigma_A$ are backed out from a listed company's stock. For a private borrower you do not have $\sigma_E$, which is one reason private credit marks are smoother than they should be.
+
+## The game inside the model
+
+Lender and borrower are playing a game the Merton model makes explicit. The borrower chooses $\sigma_A$ after the loan is made. The lender prices the loan on the $\sigma_A$ it expects. If the lender cannot constrain volatility, the borrower's best response once in distress is to raise it, and the lender's best response ex ante is to charge for that possibility. Covenant-lite structures remove the constraint and the pricing should reflect it. Where it does not, the mispricing sits with the lender, which in private credit is increasingly a retail-facing fund.
+
+## What this means for investors
+
+If you hold private credit through a fund, the questions to ask are the model's inputs: what is the asset volatility of the borrowers, not just their leverage; how far is the typical borrower from the point where the spread curve goes vertical; and what mechanisms stop a distressed borrower from doing what option holders rationally do. The spread you are paid is only generous relative to the right answers.

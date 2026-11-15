@@ -1,0 +1,50 @@
+---
+title: "The Winner's Curse at the Treasury Auction"
+date: 2026-10-23
+week: 13
+tags: [Game Theory, Markets]
+summary: "When bidders compete for something whose value is the same for everyone but known to nobody, the winner is the bidder who overestimated it the most. Treasury auctions, spectrum sales, and block trades all have this structure. The simulator shows how much a naive bidder loses and how much to shade a bid to break even."
+takeaways:
+  - "In a common-value auction, winning is bad news: it tells you your signal was the highest of n. Rational bidders shade below their estimate by the expected bias of the top order statistic."
+  - "The required shading rises with the number of bidders and with signal noise. More competition means bid less, not more."
+  - "Auction 'tails' (the gap between the stop-out yield and the when-issued yield) are a direct read on how much the crowd shaded. A long tail means bidders were cautious; a stop-through means they were not."
+  - "Retail investors face the curse in every competitive process: IPO allocations, block sales, real-estate bidding wars. The cure is the same: condition your valuation on the fact of winning."
+sources:
+  - title: "TreasuryDirect: How Treasury auctions work"
+    url: https://www.treasurydirect.gov/auctions/how-auctions-work/
+  - title: "Milgrom, P. & Weber, R. (1982). A theory of auctions and competitive bidding"
+    url: https://www.jstor.org/stable/1911865
+  - title: "Thaler, R. (1988). Anomalies: the winner's curse"
+    url: https://www.aeaweb.org/articles?id=10.1257/jep.2.1.191
+---
+import AuctionSim from '../../components/models/AuctionSim.astro';
+
+## The setup
+
+An object has a true value $V$ that is the same for every bidder. Nobody knows $V$; each bidder sees a noisy estimate $x_i = V + \varepsilon_i$ with $\varepsilon_i \sim N(0,\sigma^2)$. Bids are sealed and the highest wins at their bid. A Treasury note at auction fits this template well: its value next week is set by one market, every dealer has an estimate of that value, and the dealer who thought it was worth the most ends up owning the most.
+
+<AuctionSim id="auction" note="True value uniform on [80, 120]. Monte Carlo on common random numbers so the curve is smooth across shading levels." />
+
+## The curse in one line
+
+The winner's estimate is the maximum of $n$ draws. The expected value of the maximum of $n$ unbiased estimates is above the truth:
+
+$$
+\mathbb{E}\big[\max_i x_i\big] = V + \sigma\, \mathbb{E}\big[\max_i z_i\big], \qquad z_i \sim N(0,1)
+$$
+
+For $n = 6$ the expected maximum of standard normals is about 1.27; for $n = 20$ it is about 1.87. A bidder who bids their own estimate and wins has, on average, paid $V + 1.27\sigma$ for something worth $V$. The simulator's "expected bias of the highest signal" box reports this quantity for your settings, and "winner's expected profit" at zero shading is its negative.
+
+## Shading
+
+Each bidder bids $x_i - k\sigma$. With every bidder shading identically, the highest signal still wins, so the winner's profit is simply $k\sigma$ minus the bias. The break-even $k$ equals the expected bias in units of $\sigma$, which is the quantity above. Beyond break-even, further shading would be profitable if it did not cost you the auction; in a real auction against bidders who shade less, it does. The equilibrium of the full game, derived by Milgrom and Weber, has every bidder shading to the point where winning is just barely worth it, conditional on the information that winning reveals.
+
+The simulator exposes two parameters to drag. Raise $n$ and the required shading climbs; counterintuitively, more competitors should make you bid *less*. Raise $\sigma$ and it climbs faster: the noisier everyone's estimates, the more the winner's estimate overshoots.
+
+## Reading auction results
+
+Treasury auction statistics are a live read on this game. The **tail** is the stop-out yield minus the when-issued yield at the deadline. A positive tail means the marginal winning bid was below the market's prior estimate of value, which is to say bidders shaded. A **stop-through** means winners paid more than the pre-auction market thought the notes were worth: either new information arrived or the crowd under-shaded. The **bid-to-cover** ratio is a proxy for $n$. Rising bid-to-cover with persistent tails is a market that has learned to shade; rising bid-to-cover with stop-throughs is a market that is about to learn.
+
+## What this means for investors
+
+Any time you win a competitive process, ask what winning tells you. Your valuation was the highest in the room. Unless you had better information than the room, the room's average was closer to right than you were. The correction is not to stop bidding. It is to bid as if you will win, which means bidding on the value conditional on your estimate being the maximum, and that is always lower than your estimate.

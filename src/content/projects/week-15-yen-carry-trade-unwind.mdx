@@ -1,0 +1,54 @@
+---
+title: "The Yen Carry Trade: Pricing the Unwind"
+date: 2026-11-06
+week: 15
+tags: [CFA, Geopolitics, Markets]
+summary: "Borrow in a low-rate currency, invest in a high-rate one, and collect the difference until the day everyone exits at once. Covered interest parity says the hedged version of the trade earns nothing, so the carry is payment for bearing a distribution with a very bad left tail. The simulator builds that distribution with fat tails and crowding jumps and reports VaR, expected shortfall, and the probability of a margin call."
+takeaways:
+  - "Under covered interest parity the forward discount equals the rate differential, so hedged carry is zero. Unhedged carry is a bet that the spot rate will not move as much as the forward implies."
+  - "Carry returns are negatively skewed with fat tails: many small gains and occasional large losses. A normal-distribution VaR understates the risk by a wide margin."
+  - "Leverage turns a 10% spot move into a wiped-out account. The probability of a margin call is the risk metric that matters, and it rises nonlinearly with leverage."
+  - "Crowded positioning is the unwind mechanism. Everyone's stop sits at a similar level, and the first forced seller moves the price to the next stop."
+sources:
+  - title: "CFA Institute: Currency Management (Level III)"
+    url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/currency-management-introduction
+  - title: "Bank for International Settlements: Quarterly Review, the August 2024 market turbulence"
+    url: https://www.bis.org/publ/qtrpdf/r_qt2409.htm
+  - title: "Bank of Japan: Monetary policy releases"
+    url: https://www.boj.or.jp/en/mopo/index.htm
+---
+import CarryTrade from '../../components/models/CarryTrade.astro';
+
+## The setup
+
+The yen carry trade funds at Japan's policy rate and invests in dollars, Mexican pesos, or anything else that pays more. In August 2024, a Bank of Japan hike and a weak US jobs print triggered an unwind that took the Nikkei down 12% in a day and sent the yen up 10% in a few weeks, inflicting losses on positions that had looked like free money for two years. As the BoJ continues to normalize, the question for anyone with a levered carry position is what that distribution looks like now.
+
+<CarryTrade id="carry" note="Student-t daily innovations with an adverse jump process. Margin call closes the position at the loss threshold. Illustrative, not calibrated to any live market." />
+
+## Covered interest parity
+
+The forward rate is pinned by arbitrage to the rate differential:
+
+$$
+\frac{F}{S} = \frac{1 + r_{\text{target}}\,T}{1 + r_{\text{fund}}\,T}
+$$
+
+Hold the high-yield currency and hedge it forward, and the forward discount hands back exactly the carry you earned. Hedged carry is zero (ignoring basis). The *unhedged* trade is therefore a pure bet that the spot rate will depreciate by less than the forward implies. The "CIP forward implies" box shows that break-even move for your inputs. Everything above it is profit; everything below it is loss.
+
+## Why the distribution is not normal
+
+Three features are built into the simulation. Daily spot changes are drawn from a Student-t distribution scaled to the chosen volatility; with four degrees of freedom, a four-sigma day is roughly ten times more likely than under a normal. On top of that, an adverse jump arrives with a chosen annual probability and a chosen size, representing a crowded unwind rather than ordinary noise. And a margin call closes the position when the levered loss reaches the threshold, which turns a path's temporary drawdown into a permanent one.
+
+Run it with the defaults. The mean return on equity is positive; carry is real income. The 99% VaR is a multiple of the mean. The expected shortfall beyond VaR is worse still. Skewness is negative, excess kurtosis is large, and a meaningful fraction of paths end in a margin call. Now set leverage to 10× and the margin-call probability roughly doubles while the mean barely improves: that is the shape of the trade's risk-return trade-off.
+
+## VaR, CVaR, and what they miss
+
+Level III defines value at risk as the loss not exceeded with a given confidence over a horizon, and conditional VaR (expected shortfall) as the average loss in the tail beyond it. The model reports both from the simulated distribution rather than from a parametric formula. A parametric normal VaR on the same volatility would be far smaller, because it has no jumps and thin tails. The gap between the two is a measure of how much a risk report based on normal assumptions understates carry risk.
+
+## The game underneath
+
+Carry trades are crowded for a game-theoretic reason. Each trader's position is profitable as long as nobody exits. Each trader's stop-loss is set at a similar level because everyone uses similar risk models. When the price reaches the first cluster of stops, the forced selling moves the price to the next cluster. The unwind is a coordination failure in reverse: everyone's rational individual exit produces the collective crash that none of them could survive. The jump parameter in the simulator is a crude stand-in for that mechanism; the real jump size is a function of how crowded the trade is, which is the one thing the position's own P&L never tells you.
+
+## What this means for investors
+
+Carry pays you a premium for selling insurance against a currency shock. That is a legitimate trade at a legitimate price. Whether the price is right depends on the left tail, and the left tail depends on positioning, policy, and leverage, none of which appear in the carry itself. If you hold the trade, size it on the margin-call probability, not the Sharpe ratio. If you do not hold it but own Japanese equities, emerging-market debt, or anything funded in yen by someone else, you are exposed to its unwind anyway.

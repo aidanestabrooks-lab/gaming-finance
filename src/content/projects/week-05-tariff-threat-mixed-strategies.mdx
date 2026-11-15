@@ -1,0 +1,67 @@
+---
+title: "Pricing a Tariff Threat: When Bluffing Is the Equilibrium"
+date: 2026-08-28
+week: 5
+tags: [Game Theory, Geopolitics]
+summary: "A tariff threat only works if it might be carried out, and a trading partner only concedes if the threat is credible. Neither side can commit to a pure strategy, so the equilibrium is a mixture. The solver below lets you edit the payoffs and watch the equilibrium move."
+takeaways:
+  - "When there is no pure-strategy equilibrium, each side randomizes exactly enough to make the other indifferent. The mixing probabilities depend on the opponent's payoffs, not your own."
+  - "Markets that price a tariff as 'on' or 'off' are pricing the wrong thing. The equilibrium is a probability, and the probability moves with the other side's costs."
+  - "Raising the cost of retaliation for the partner lowers the probability the threatener needs to carry out the threat. That is the whole point of escalation dominance."
+  - "Any announced policy that is strictly dominated in the matrix will be reversed. Price the reversal, not the announcement."
+sources:
+  - title: "Peterson Institute for International Economics: trade policy research"
+    url: https://www.piie.com/research/trade-investment
+  - title: "Nash, J. (1950). Equilibrium points in n-person games"
+    url: https://www.pnas.org/doi/10.1073/pnas.36.1.48
+---
+import PayoffMatrix from '../../components/models/PayoffMatrix.astro';
+
+## The setup
+
+Two governments. The first threatens tariffs unless the second changes a policy. The second can concede or hold firm. The first can then impose the tariff or back down. Collapse the sequence into a simultaneous game of beliefs, and you get a 2×2 matrix: the threatener chooses between **Impose** and **Bluff**; the partner chooses between **Concede** and **Resist**.
+
+Payoffs are in arbitrary units of political and economic welfare. The defaults below encode four stylized facts: conceding to a bluff is humiliating, imposing a tariff on a conceding partner is wasteful, resisting a real tariff hurts both sides, and getting a concession for free is the best outcome of all.
+
+<PayoffMatrix
+  id="tariff"
+  rowPlayer="Threatener"
+  colPlayer="Partner"
+  rows={["Impose", "Bluff"]}
+  cols={["Concede", "Resist"]}
+  payoffs={[[[1, -2], [-3, -4]], [[4, -1], [0, 2]]]}
+  note="Payoffs (Threatener, Partner). Edit any cell."
+/>
+
+## Why no pure equilibrium exists
+
+Check each corner. If the partner concedes, the threatener prefers to bluff (4 beats 1). If the threatener bluffs, the partner prefers to resist (2 beats −1). If the partner resists, the threatener prefers to impose (−3 beats 0? No: 0 beats −3, so the threatener bluffs). But if the threatener bluffs and the partner resists, the partner is happy and the threatener wants to switch to imposing only if it improves on 0, which it does not.
+
+Walk the cycle with the default numbers and you will find one cell where nobody wants to move: that is a pure equilibrium, and the solver marks it. Change the payoff for resisting a real tariff from −4 to −1 and the cycle never closes. Every corner has someone who wants to deviate. The only stable outcome is for both sides to randomize.
+
+## The mixing condition
+
+Let $p$ be the probability the threatener imposes and $q$ the probability the partner concedes. The threatener mixes only if indifferent between imposing and bluffing:
+
+$$
+q\,u_T(I,C) + (1-q)\,u_T(I,R) \;=\; q\,u_T(B,C) + (1-q)\,u_T(B,R)
+$$
+
+Solving for $q$ gives the partner's equilibrium concession probability. Notice what is in that equation: only the **threatener's** payoffs. The partner's mixing probability is pinned down entirely by what makes the threatener indifferent, and vice versa:
+
+$$
+q^* = \frac{u_T(B,R) - u_T(I,R)}{\big[u_T(I,C) - u_T(I,R)\big] - \big[u_T(B,C) - u_T(B,R)\big]}, \qquad
+p^* = \frac{u_P(B,R) - u_P(B,C)}{\big[u_P(I,C) - u_P(I,R)\big] - \big[u_P(B,C) - u_P(B,R)\big]}
+$$
+
+This is the result that trips up most commentary. Making the threatener more hawkish (raising their payoff from imposing) does not make them impose more often in equilibrium. It makes the **partner** concede more often, because the partner now needs to concede more to keep the threatener indifferent.
+
+## The best-response diagram
+
+The chart plots each side's best response as a function of the other's mixing probability. The threatener's best response is a step in $p$ that flips at $q^*$; the partner's is a step in $q$ that flips at $p^*$. Where the two steps cross is the equilibrium. When they cross at a corner, it is a pure equilibrium. When they cross in the interior, both sides are randomizing.
+
+Drag a few numbers. Lower the partner's cost of resisting a real tariff and watch $p^*$ rise: the threatener has to impose more often to keep the partner guessing. Raise the threatener's cost of imposing and $q^*$ falls: the partner can afford to resist more.
+
+## What this means for investors
+
+A tariff headline is a draw from a mixed strategy. The market usually prices it as a regime change. The gap between those two things is where the opportunity sits. The equilibrium probability is a function of both sides' payoffs, and those payoffs are readable: fiscal position, election timing, the share of exports exposed, the depth of substitutes. When a payoff moves, the equilibrium probability moves with it, and it moves in the direction the formulas above dictate, which is often the opposite of what intuition suggests.

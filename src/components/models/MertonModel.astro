@@ -1,0 +1,112 @@
+---
+/**
+ * Merton structural credit model (CFA Level II credit analysis). Equity is a
+ * call on the firm's assets struck at the face value of debt. Outputs the
+ * risk-neutral default probability, distance to default, implied credit spread,
+ * and expected recovery, plus a spread-versus-leverage curve at several vols.
+ */
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+}
+const { id, title = 'Merton model: equity as a call on assets', note } = Astro.props;
+---
+
+<div class="model" data-model="merton" id={id}>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    {note && <p class="model-note">{note}</p>}
+  </div>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Asset value (V)</span><output data-o="v">$1,000M</output></span><input type="range" min="100" max="3000" step="10" value="1000" data-in="v" /></label>
+    <label class="ctl"><span class="lab"><span>Face value of debt (D)</span><output data-o="d">$700M</output></span><input type="range" min="50" max="2500" step="10" value="700" data-in="d" /></label>
+    <label class="ctl"><span class="lab"><span>Asset volatility σ<sub>A</sub></span><output data-o="s">25%</output></span><input type="range" min="0.05" max="0.8" step="0.01" value="0.25" data-in="s" /></label>
+    <label class="ctl"><span class="lab"><span>Time to maturity (T)</span><output data-o="t">3.0 yrs</output></span><input type="range" min="0.25" max="10" step="0.25" value="3" data-in="t" /></label>
+    <label class="ctl"><span class="lab"><span>Risk-free rate</span><output data-o="r">4.0%</output></span><input type="range" min="0" max="0.1" step="0.0025" value="0.04" data-in="r" /></label>
+    <label class="ctl"><span class="lab"><span>Expected asset return μ (for real-world DD)</span><output data-o="mu">7.0%</output></span><input type="range" min="0" max="0.2" step="0.005" value="0.07" data-in="mu" /></label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Equity value</div><div class="v" data-out="e">–</div></div>
+    <div class="stat"><div class="k">Debt value</div><div class="v" data-out="b">–</div></div>
+    <div class="stat"><div class="k">Implied credit spread</div><div class="v" data-out="cs">–</div></div>
+    <div class="stat"><div class="k">Risk-neutral PD</div><div class="v" data-out="pd">–</div></div>
+    <div class="stat"><div class="k">Distance to default (real-world)</div><div class="v" data-out="dd">–</div><div class="k" data-out="pdp">–</div></div>
+    <div class="stat"><div class="k">Expected recovery given default</div><div class="v" data-out="rec">–</div></div>
+    <div class="stat"><div class="k">Leverage D·e<sup>−rT</sup> / V</div><div class="v" data-out="lev">–</div></div>
+    <div class="stat"><div class="k">Equity delta ∂E/∂V</div><div class="v" data-out="delta">–</div></div>
+    <div class="stat"><div class="k">Equity vol σ<sub>E</sub> (= Δ·V·σ<sub>A</sub>/E)</div><div class="v" data-out="se">–</div></div>
+  </div>
+  <svg class="sp" viewBox="0 0 720 250" role="img" aria-label="Credit spread versus leverage"></svg>
+  <div class="legend">
+    <span><i style="background: var(--c1)"></i>σ<sub>A</sub> = 15%</span>
+    <span><i style="background: var(--c2)"></i>σ<sub>A</sub> = 25%</span>
+    <span><i style="background: var(--c3)"></i>σ<sub>A</sub> = 40%</span>
+    <span><i style="background: var(--text); border-radius: 50%"></i>This firm</span>
+  </div>
+</div>
+
+<script>
+  import { normCdf, normPdf, fmt } from '../../lib/stats';
+  import { el, clear, axes, path, scale } from '../../lib/svg';
+
+  function merton(V: number, D: number, s: number, T: number, r: number) {
+    const sT = s * Math.sqrt(T);
+    const d1 = (Math.log(V / D) + (r + 0.5 * s * s) * T) / sT;
+    const d2 = d1 - sT;
+    const E = V * normCdf(d1) - D * Math.exp(-r * T) * normCdf(d2);
+    const B = V - E;
+    const y = -Math.log(B / D) / T;
+    const pd = normCdf(-d2);
+    // Expected recovery (as a fraction of face) conditional on default, risk-neutral.
+    const rec = pd > 1e-9 ? (V * Math.exp(r * T) * normCdf(-d1)) / (D * pd) : 1;
+    return { d1, d2, E, B, y, spread: y - r, pd, rec, delta: normCdf(d1) };
+  }
+
+  function init(root: HTMLElement) {
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const svg = root.querySelector<SVGSVGElement>('svg.sp')!;
+
+    const update = () => {
+      const V = +q('v').value, D = +q('d').value, s = +q('s').value, T = +q('t').value, r = +q('r').value, mu = +q('mu').value;
+      o('v').textContent = `$${V.toLocaleString()}M`; o('d').textContent = `$${D.toLocaleString()}M`; o('s').textContent = fmt.pct(s, 0);
+      o('t').textContent = `${T.toFixed(2)} yrs`; o('r').textContent = fmt.pct(r, 2); o('mu').textContent = fmt.pct(mu, 1);
+
+      const m = merton(V, D, s, T, r);
+      out('e').textContent = `$${m.E.toFixed(1)}M`;
+      out('b').textContent = `$${m.B.toFixed(1)}M (${fmt.pct(m.B / D, 1)} of face)`;
+      const cs = out('cs');
+      cs.textContent = fmt.bp(m.spread);
+      cs.className = 'v ' + (m.spread > 0.03 ? 'neg' : '');
+      out('pd').textContent = fmt.pct(m.pd, 2);
+      const ddReal = (Math.log(V / D) + (mu - 0.5 * s * s) * T) / (s * Math.sqrt(T));
+      out('dd').textContent = `${ddReal.toFixed(2)}σ`;
+      out('pdp').textContent = `real-world PD ≈ ${fmt.pct(normCdf(-ddReal), 2)}`;
+      out('rec').textContent = fmt.pct(Math.min(1, m.rec), 1);
+      out('lev').textContent = ((D * Math.exp(-r * T)) / V).toFixed(2);
+      out('delta').textContent = m.delta.toFixed(3);
+      out('se').textContent = fmt.pct((m.delta * V * s) / m.E, 0);
+
+      clear(svg);
+      const box = { left: 56, right: 700, top: 14, bottom: 210 };
+      const levs: number[] = [];
+      for (let l = 0.1; l <= 1.5001; l += 0.02) levs.push(l);
+      const curves = [0.15, 0.25, 0.4].map((sv) => levs.map((l) => Math.min(0.2, merton(1, l * Math.exp(r * T), sv, T, r).spread)));
+      const sx = scale(0.1, 1.5, box.left, box.right), sy = scale(0, 0.2, box.bottom, box.top);
+      const g = el('g');
+      axes(g, sx, sy, [0.1, 1.5], [0, 0.2], box, (v) => v.toFixed(1), (v) => fmt.bp(v));
+      svg.appendChild(g);
+      curves.forEach((cv, i) => svg.appendChild(el('path', { d: path(levs.map((l, k) => [sx(l), sy(cv[k])])), fill: 'none', stroke: `var(--c${i + 1})`, 'stroke-width': 2.5 })));
+      const myLev = (D * Math.exp(-r * T)) / V;
+      if (myLev >= 0.1 && myLev <= 1.5) svg.appendChild(el('circle', { cx: sx(myLev), cy: sy(Math.min(0.2, m.spread)), r: 6, fill: 'var(--text)' }));
+      svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 242, class: 'lbl muted', 'text-anchor': 'middle' }, 'leverage: PV of debt ÷ asset value'));
+      void normPdf;
+    };
+    ['v', 'd', 's', 't', 'r', 'mu'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="merton"]').forEach(init);
+</script>

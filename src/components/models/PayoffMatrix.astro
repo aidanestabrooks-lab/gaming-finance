@@ -1,0 +1,205 @@
+---
+/**
+ * Interactive 2x2 normal-form game. Edit any payoff; the solver recomputes
+ * pure-strategy Nash equilibria, the mixed-strategy equilibrium (if one exists),
+ * and redraws the best-response correspondences in (p, q) space.
+ */
+interface Props {
+  id: string;
+  rowPlayer: string;
+  colPlayer: string;
+  rows: [string, string];
+  cols: [string, string];
+  payoffs: number[][][]; // [row][col] = [rowPayoff, colPayoff]
+  title?: string;
+  note?: string;
+}
+const { id, rowPlayer, colPlayer, rows, cols, payoffs, title = 'Normal-form solver', note } = Astro.props;
+---
+
+<div
+  class="model"
+  data-model="payoff"
+  id={id}
+  data-rows={JSON.stringify(rows)}
+  data-cols={JSON.stringify(cols)}
+  data-players={JSON.stringify([rowPlayer, colPlayer])}
+>
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    {note && <p class="model-note">{note}</p>}
+  </div>
+  <div class="two-col">
+    <div class="table-scroll">
+      <table class="pm">
+        <thead>
+          <tr>
+            <th></th>
+            {cols.map((c) => <th>{colPlayer}: {c}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {
+            rows.map((r, i) => (
+              <tr>
+                <th>{rowPlayer}: {r}</th>
+                {cols.map((c, j) => (
+                  <td>
+                    <input type="number" step="0.5" data-i={i} data-j={j} data-p="0" value={payoffs[i][j][0]} aria-label={`${rowPlayer} payoff when ${r} vs ${c}`} />
+                    <span class="sep">,</span>
+                    <input type="number" step="0.5" data-i={i} data-j={j} data-p="1" value={payoffs[i][j][1]} aria-label={`${colPlayer} payoff when ${r} vs ${c}`} />
+                  </td>
+                ))}
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+      <p class="readout">Cells read (<strong>{rowPlayer}</strong>, <strong>{colPlayer}</strong>). Edit any number.</p>
+      <div class="stats">
+        <div class="stat"><div class="k">Pure-strategy NE</div><div class="v" data-out="pure">–</div></div>
+        <div class="stat"><div class="k">Mixed NE: p = P({rowPlayer} plays {rows[0]})</div><div class="v" data-out="p">–</div></div>
+        <div class="stat"><div class="k">Mixed NE: q = P({colPlayer} plays {cols[0]})</div><div class="v" data-out="q">–</div></div>
+        <div class="stat"><div class="k">Expected payoffs at mixed NE</div><div class="v" data-out="ev">–</div></div>
+      </div>
+    </div>
+    <div>
+      <svg class="br" viewBox="0 0 340 320" role="img" aria-label="Best-response diagram"></svg>
+      <div class="legend">
+        <span><i style="background: var(--c1)"></i>{rowPlayer} best response</span>
+        <span><i style="background: var(--c2)"></i>{colPlayer} best response</span>
+        <span><i style="background: var(--text); border-radius: 50%"></i>Nash equilibrium</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .pm td {
+    white-space: nowrap;
+  }
+  .pm td input {
+    width: 4.2em;
+  }
+  .sep {
+    color: var(--muted);
+    margin: 0 0.15rem;
+  }
+</style>
+
+<script>
+  import { el, clear, path } from '../../lib/svg';
+
+  type U = number[][][];
+
+  function read(root: HTMLElement): U {
+    const U: U = [
+      [
+        [0, 0],
+        [0, 0],
+      ],
+      [
+        [0, 0],
+        [0, 0],
+      ],
+    ];
+    root.querySelectorAll<HTMLInputElement>('input[data-i]').forEach((inp) => {
+      U[+inp.dataset.i!][+inp.dataset.j!][+inp.dataset.p!] = parseFloat(inp.value) || 0;
+    });
+    return U;
+  }
+
+  function solve(U: U) {
+    const pure: [number, number][] = [];
+    for (let i = 0; i < 2; i++)
+      for (let j = 0; j < 2; j++) {
+        const rowBest = U[i][j][0] >= U[1 - i][j][0];
+        const colBest = U[i][j][1] >= U[i][1 - j][1];
+        if (rowBest && colBest) pure.push([i, j]);
+      }
+    const a = U[0][0][0], b = U[0][1][0], c = U[1][0][0], d = U[1][1][0];
+    const v00 = U[0][0][1], v01 = U[0][1][1], v10 = U[1][0][1], v11 = U[1][1][1];
+    const dq = a - b - c + d;
+    const dp = v00 - v01 - v10 + v11;
+    const q = dq !== 0 ? (d - b) / dq : NaN;
+    const p = dp !== 0 ? (v11 - v10) / dp : NaN;
+    const mixed = p > 0 && p < 1 && q > 0 && q < 1;
+    const evRow = p * q * a + p * (1 - q) * b + (1 - p) * q * c + (1 - p) * (1 - q) * d;
+    const evCol = p * q * v00 + p * (1 - q) * v01 + (1 - p) * q * v10 + (1 - p) * (1 - q) * v11;
+    return { pure, p, q, mixed, evRow, evCol, a, b, c, d, v00, v01, v10, v11 };
+  }
+
+  function draw(svg: SVGSVGElement, s: ReturnType<typeof solve>, rows: string[], cols: string[]) {
+    clear(svg);
+    const L = 44, R = 320, T = 16, B = 280;
+    const sx = (p: number) => L + p * (R - L);
+    const sy = (q: number) => B - q * (B - T);
+    const g = el('g');
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      g.appendChild(el('line', { x1: sx(t), x2: sx(t), y1: T, y2: B, class: 'grid' }));
+      g.appendChild(el('line', { x1: L, x2: R, y1: sy(t), y2: sy(t), class: 'grid' }));
+      g.appendChild(el('text', { x: sx(t), y: B + 14, class: 'tick', 'text-anchor': 'middle' }, t.toFixed(2)));
+      g.appendChild(el('text', { x: L - 5, y: sy(t) + 4, class: 'tick', 'text-anchor': 'end' }, t.toFixed(2)));
+    }
+    g.appendChild(el('text', { x: (L + R) / 2, y: B + 30, class: 'lbl muted', 'text-anchor': 'middle' }, `p = P(${rows[0]})`));
+    g.appendChild(el('text', { x: 12, y: (T + B) / 2, class: 'lbl muted', 'text-anchor': 'middle', transform: `rotate(-90 12 ${(T + B) / 2})` }, `q = P(${cols[0]})`));
+    svg.appendChild(g);
+
+    // Row player's best response: p as a function of q.
+    const rowPts: [number, number][] = [];
+    for (let k = 0; k <= 200; k++) {
+      const q = k / 200;
+      const u0 = s.a * q + s.b * (1 - q);
+      const u1 = s.c * q + s.d * (1 - q);
+      const p = u0 > u1 + 1e-12 ? 1 : u0 < u1 - 1e-12 ? 0 : NaN;
+      if (!Number.isNaN(p)) rowPts.push([sx(p), sy(q)]);
+      else {
+        rowPts.push([sx(0), sy(q)]);
+        rowPts.push([sx(1), sy(q)]);
+      }
+    }
+    svg.appendChild(el('path', { d: path(rowPts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 3, 'stroke-linejoin': 'round' }));
+
+    // Column player's best response: q as a function of p.
+    const colPts: [number, number][] = [];
+    for (let k = 0; k <= 200; k++) {
+      const p = k / 200;
+      const w0 = s.v00 * p + s.v10 * (1 - p);
+      const w1 = s.v01 * p + s.v11 * (1 - p);
+      const q = w0 > w1 + 1e-12 ? 1 : w0 < w1 - 1e-12 ? 0 : NaN;
+      if (!Number.isNaN(q)) colPts.push([sx(p), sy(q)]);
+      else {
+        colPts.push([sx(p), sy(0)]);
+        colPts.push([sx(p), sy(1)]);
+      }
+    }
+    svg.appendChild(el('path', { d: path(colPts), fill: 'none', stroke: 'var(--c2)', 'stroke-width': 3, 'stroke-dasharray': '6 3', 'stroke-linejoin': 'round' }));
+
+    for (const [i, j] of s.pure) {
+      svg.appendChild(el('circle', { cx: sx(i === 0 ? 1 : 0), cy: sy(j === 0 ? 1 : 0), r: 6, fill: 'var(--text)' }));
+    }
+    if (s.mixed) {
+      svg.appendChild(el('circle', { cx: sx(s.p), cy: sy(s.q), r: 6, fill: 'var(--text)' }));
+      svg.appendChild(el('text', { x: sx(s.p) + 9, y: sy(s.q) - 8, class: 'lbl mono' }, `(${s.p.toFixed(2)}, ${s.q.toFixed(2)})`));
+    }
+  }
+
+  function init(root: HTMLElement) {
+    const rows = JSON.parse(root.dataset.rows!) as string[];
+    const cols = JSON.parse(root.dataset.cols!) as string[];
+    const svg = root.querySelector<SVGSVGElement>('svg.br')!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const update = () => {
+      const s = solve(read(root));
+      out('pure').textContent = s.pure.length ? s.pure.map(([i, j]) => `(${rows[i]}, ${cols[j]})`).join('; ') : 'none';
+      out('p').textContent = s.mixed ? s.p.toFixed(3) : Number.isNaN(s.p) ? 'undefined' : `${s.p.toFixed(2)} (outside (0,1))`;
+      out('q').textContent = s.mixed ? s.q.toFixed(3) : Number.isNaN(s.q) ? 'undefined' : `${s.q.toFixed(2)} (outside (0,1))`;
+      out('ev').textContent = s.mixed ? `${s.evRow.toFixed(2)}, ${s.evCol.toFixed(2)}` : '–';
+      draw(svg, s, rows, cols);
+    };
+    root.querySelectorAll('input').forEach((i) => i.addEventListener('input', update));
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="payoff"]').forEach(init);
+</script>

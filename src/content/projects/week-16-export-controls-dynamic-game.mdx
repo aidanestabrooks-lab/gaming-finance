@@ -1,0 +1,63 @@
+---
+title: "Export Controls as a Three-Player Dynamic Game"
+date: 2026-11-13
+week: 16
+tags: [Game Theory, Geopolitics, Firms]
+summary: "The United States tightens chip export controls, China retaliates or indigenizes, and the foundry in the middle decides where to build. Played over several rounds, that is an extensive-form game with tens of thousands of histories. The engine below generates the whole tree from a state model, solves it by backward induction in milliseconds, and sweeps the parameters to show where the equilibrium flips."
+takeaways:
+  - "A multi-round game is solved from the last round backward. The first move depends on every rational response to it, which is why a policy that looks strong in isolation can be an equilibrium loser."
+  - "Export controls that accelerate indigenization carry their own expiry date. In the model, raising the indigenization speed flips the US opening move from Tighten to Hold well before controls become ineffective."
+  - "The foundry's diversification decision is a hedge whose value rises with escalation. TSMC's overseas fabs are the equilibrium response to the other two players' incentives, not just to subsidies."
+  - "Sensitivity maps matter more than point solutions. The boundaries between equilibrium regions are where small changes in beliefs produce large changes in policy, and markets price those boundaries badly."
+sources:
+  - title: "Bureau of Industry and Security: Advanced computing and semiconductor export controls"
+    url: https://www.bis.gov/
+  - title: "CSIS: Semiconductors and national security"
+    url: https://www.csis.org/
+  - title: "Fudenberg, D. & Tirole, J. (1991). Game Theory (subgame-perfect equilibrium in multistage games)"
+    url: https://mitpress.mit.edu/9780262061414/game-theory/
+---
+import DynamicGame from '../../components/models/DynamicGame.astro';
+
+## The setup
+
+Three players move in sequence each round. The **United States** chooses to tighten controls, hold, or loosen. **China** chooses to retaliate, comply, or redirect effort into indigenous capability. **TSMC** chooses to diversify capacity abroad or concentrate it at home. Each action updates a state vector: the US technology lead, China's self-sufficiency, the escalation level, TSMC's margin, and TSMC's geographic diversification. After $R$ rounds, each player's payoff is a function of the final state.
+
+The tree has $18^R$ terminal histories. For $R = 3$ that is 5,832; for $R = 4$ it is 104,976. The engine does not store the tree. It generates it recursively from the state transitions and solves it on the way back up.
+
+<DynamicGame id="export" note="Illustrative state model and payoff weights. Not a forecast. Everything is parameterized so you can disagree with it." />
+
+## The state model
+
+Let $\ell$ be the US lead, $s$ China's self-sufficiency, $e$ escalation, $m$ TSMC's margin, and $d$ its diversification. The main transitions:
+
+- **Tighten**: $\ell \mathrel{+}= \alpha(1 - s)$, $e \mathrel{+}= 1$, and $s \mathrel{+}= \tfrac12\gamma$. Controls add to the lead in proportion to how dependent China still is, raise tension, and push China to build its own supply.
+- **Retaliate**: $e \mathrel{+}= 1$, $\ell \mathrel{-}= 0.25$, $m \mathrel{-}= 0.1$. Rare-earth and market-access retaliation hurts the US lead and the foundry's margin.
+- **Indigenize**: $s \mathrel{+}= \gamma$. Self-sufficiency rises at the indigenization speed.
+- **Diversify**: $d \mathrel{+}= 0.25$, $m \mathrel{-}= 0.05$. Overseas fabs cost margin and buy insurance. **Concentrate** adds $0.03$ to margin.
+
+Terminal payoffs:
+
+$$
+u_{\text{US}} = \ell - c_{\text{US}}\, e^2 - 0.6\, s, \qquad
+u_{\text{CN}} = 3s - 0.8\,\ell - c_{\text{CN}}\, e^2, \qquad
+u_{\text{TSMC}} = 4m - \rho\, e\,(1 - d) + 0.6\, d
+$$
+
+Escalation is quadratic for both governments: a little is cheap, a lot is ruinous. TSMC's geopolitical risk term $\rho\, e\,(1-d)$ is the cost of being concentrated while the other two escalate, and diversification scales it down.
+
+## Reading the equilibrium
+
+With the default parameters and three rounds, the subgame-perfect path has the US tightening in the early rounds and China indigenizing rather than retaliating: retaliation is expensive under quadratic escalation costs, and self-sufficiency is the move that actually changes China's payoff. TSMC diversifies as soon as escalation starts. The round-by-round table shows the state evolving, and the first-round tree shows the rollback values of every opening combination, so you can see by how much the equilibrium move beats the alternatives.
+
+Now raise the indigenization speed $\gamma$. Each round of tightening buys less lead (the $1-s$ factor shrinks) and accelerates the thing that erodes it. At some $\gamma$ the US's rollback value for Tighten drops below Hold and the opening move flips. Raise $c_{\text{US}}$ instead and the same flip happens through the cost of escalation. Lower $c_{\text{CN}}$ and China starts retaliating, which makes tightening less attractive again.
+
+## The sensitivity map
+
+The heatmap re-solves the three-round game at 196 combinations of US escalation cost and indigenization speed, holding the other sliders fixed, and colors each cell by the US opening move. The map has regions, and the regions have boundaries. Near a boundary, a small change in either parameter flips the entire equilibrium path. Far from a boundary, the policy is robust to disagreement about the parameters.
+
+This is the useful output. Nobody knows $\gamma$ or $c_{\text{US}}$. But the map tells you which combinations of beliefs lead to which policies, and whether current policy sits in the middle of a region or on an edge.
+
+## What this means for investors
+
+The semiconductor supply chain is priced as if export-control policy were a sequence of announcements. It is an equilibrium of a repeated game, and the equilibrium is a function of a handful of parameters that the market can observe moving: how fast China's domestic capability advances, how costly escalation has proven to be, how much margin the foundry gives up abroad. When those parameters move toward a boundary on the map, the policy regime is about to change, and the names exposed to it, equipment makers, foundries, and the hyperscalers that depend on them, will reprice. The tree is large. The number of things to watch is small.
