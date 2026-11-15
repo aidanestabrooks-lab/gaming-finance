@@ -1,0 +1,80 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import ProjectCard from '../components/ProjectCard.astro';
+import Newsletter from '../components/Newsletter.astro';
+import { SITE, url } from '../consts';
+
+const projects = (await getCollection('projects', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+const [latest, ...rest] = projects;
+const recent = rest.slice(0, 3);
+---
+
+<BaseLayout>
+  <section class="wrap hero">
+    <p class="kicker">A weekly research series</p>
+    <h1>{SITE.tagline}.</h1>
+    <p class="lede">
+      Each week, one project takes a firm, a geopolitical event, or a market situation and works
+      out who the players are, what they want, and what that means for everyday investors.
+    </p>
+  </section>
+
+  {
+    latest && (
+      <section class="wrap block">
+        <div class="section-head">
+          <h2 class="section-title">Latest project</h2>
+        </div>
+        <ProjectCard project={latest} featured />
+      </section>
+    )
+  }
+
+  {
+    recent.length > 0 && (
+      <section class="wrap block">
+        <div class="section-head">
+          <h2 class="section-title">Recent projects</h2>
+          <a href={url('/projects')}>All projects</a>
+        </div>
+        <div class="grid">
+          {recent.map((p) => <ProjectCard project={p} />)}
+        </div>
+      </section>
+    )
+  }
+
+  <Newsletter />
+</BaseLayout>
+
+<style>
+  .hero {
+    padding-top: 4rem;
+    padding-bottom: 3rem;
+    max-width: calc(var(--max));
+  }
+  .hero h1 {
+    max-width: 22ch;
+  }
+  .lede {
+    font-size: 1.2rem;
+    color: var(--muted);
+    max-width: 60ch;
+    margin: 0;
+  }
+  .block {
+    margin-top: 2.5rem;
+  }
+  @media (max-width: 640px) {
+    .hero {
+      padding-top: 2.5rem;
+      padding-bottom: 2rem;
+    }
+    .lede {
+      font-size: 1.05rem;
+    }
+  }
+</style>

@@ -1,0 +1,57 @@
+---
+interface Series {
+  name: string;
+  data: number[];
+}
+interface Props {
+  chart: {
+    title: string;
+    type: 'line' | 'bar';
+    labels: string[];
+    series: Series[];
+    note?: string;
+  };
+}
+const { chart } = Astro.props;
+---
+
+<figure class="chart">
+  <figcaption>
+    <strong>{chart.title}</strong>
+    {chart.note && <span class="note">{chart.note}</span>}
+  </figcaption>
+  <div class="canvas-wrap">
+    <canvas data-chart={JSON.stringify(chart)} role="img" aria-label={chart.title}></canvas>
+  </div>
+</figure>
+
+<style>
+  .chart {
+    margin: 2rem 0;
+    padding: 1.2rem 1.2rem 1rem;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    max-width: var(--measure);
+  }
+  figcaption {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    margin-bottom: 0.9rem;
+    font-size: 0.95rem;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .canvas-wrap {
+    position: relative;
+    height: 300px;
+  }
+  @media (max-width: 640px) {
+    .canvas-wrap {
+      height: 240px;
+    }
+  }
+</style>

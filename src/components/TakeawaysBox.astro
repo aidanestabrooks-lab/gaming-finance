@@ -1,0 +1,39 @@
+---
+interface Props {
+  items: string[];
+}
+const { items } = Astro.props;
+---
+
+<aside class="takeaways" aria-labelledby="takeaways-title">
+  <p class="kicker" id="takeaways-title">Key takeaways for investors</p>
+  <ol>
+    {items.map((t) => <li>{t}</li>)}
+  </ol>
+</aside>
+
+<style>
+  .takeaways {
+    margin: 2.5rem 0;
+    padding: 1.5rem 1.6rem;
+    background: var(--gold-soft);
+    border: 1px solid var(--line);
+    border-left: 4px solid var(--gold);
+    border-radius: var(--radius);
+    max-width: var(--measure);
+  }
+  .kicker {
+    margin-bottom: 0.6rem;
+  }
+  ol {
+    margin: 0;
+    padding-left: 1.3rem;
+  }
+  li {
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+  }
+  li:last-child {
+    margin-bottom: 0;
+  }
+</style>

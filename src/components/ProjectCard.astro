@@ -1,0 +1,119 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import TagPill from './TagPill.astro';
+import { url, fmtDate, tagSlug } from '../consts';
+
+interface Props {
+  project: CollectionEntry<'projects'>;
+  featured?: boolean;
+}
+
+const { project, featured = false } = Astro.props;
+const { title, date, week, tags, summary } = project.data;
+const href = url(`/projects/${project.id}`);
+const Heading = featured ? 'h2' : 'h3';
+---
+
+<article class:list={['card', { featured }]} data-tags={tags.map(tagSlug).join('|')}>
+  <div class="meta">
+    <span class="week">Week {week}</span>
+    <time datetime={date.toISOString()}>{fmtDate(date)}</time>
+  </div>
+  <Heading class="title"><a href={href}>{title}</a></Heading>
+  <p class="summary">{summary}</p>
+  <div class="foot">
+    <ul class="tags">
+      {tags.map((t) => <li><TagPill tag={t} /></li>)}
+    </ul>
+    <a class="more" href={href} aria-label={`Read ${title}`}>Read the project</a>
+  </div>
+</article>
+
+<style>
+  .card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 1.4rem;
+    transition: border-color 0.15s ease;
+  }
+  .card:hover {
+    border-color: var(--accent);
+  }
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .week {
+    font-weight: 600;
+    color: var(--gold);
+    background: var(--gold-soft);
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+  .title {
+    margin: 0;
+    font-size: 1.3rem;
+  }
+  .title a {
+    color: var(--text);
+    text-decoration: none;
+  }
+  .title a:hover {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  .summary {
+    margin: 0;
+    color: var(--muted);
+    flex: 1;
+  }
+  .foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.4rem;
+  }
+  .tags {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .more {
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+
+  .featured {
+    padding: 2rem;
+    border-left: 4px solid var(--gold);
+  }
+  .featured .title {
+    font-size: clamp(1.6rem, 1.2rem + 1.6vw, 2.3rem);
+  }
+  .featured .summary {
+    font-size: 1.1rem;
+    max-width: 70ch;
+  }
+  @media (max-width: 640px) {
+    .card,
+    .featured {
+      padding: 1.2rem;
+    }
+    .foot {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+</style>

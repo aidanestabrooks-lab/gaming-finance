@@ -1,0 +1,78 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Newsletter from '../components/Newsletter.astro';
+import { SITE, url } from '../consts';
+---
+
+<BaseLayout title="About" description={`What ${SITE.name} is, how each project is built, and who writes it.`}>
+  <article class="wrap about">
+    <p class="kicker">About</p>
+    <h1>Research for people who invest their own money</h1>
+
+    <div class="prose">
+      <p>
+        {SITE.name} is a weekly research series. Each week, one project takes a single firm, a
+        geopolitical event, or a market situation and asks the questions a strategist would ask:
+        who are the players, what do they want, what can they credibly threaten or promise, and
+        where does the money end up?
+      </p>
+
+      <h2>The method</h2>
+      <p>Every project runs through the same three lenses.</p>
+      <ul>
+        <li>
+          <strong>Game theory.</strong> Map the players, their options, and their payoffs. Most
+          market "surprises" are equilibria that were visible in advance to anyone who drew the
+          board.
+        </li>
+        <li>
+          <strong>Geopolitics.</strong> States, regulators, and alliances set the rules that
+          firms play by. Ignoring them is how investors get blindsided by a tariff, a sanction, or
+          an export license.
+        </li>
+        <li>
+          <strong>Finance.</strong> Translate the strategic picture into things that show up in
+          a filing: margins, capital allocation, balance-sheet risk, and the price the market is
+          charging for all of it.
+        </li>
+      </ul>
+      <p>
+        Each project ends with a short box of takeaways for investors. They are not stock picks.
+        They are the questions to ask and the signposts to watch.
+      </p>
+
+      <h2>Who writes it</h2>
+      <!-- TODO: replace this placeholder bio with your own. -->
+      <p>
+        {SITE.author} writes {SITE.name}. Aidan works in banking, has passed CFA Level I, and is
+        sitting Level II in 2027. This series exists because most writing for everyday investors
+        is either too shallow to act on or too technical to read.
+      </p>
+
+      <h2>Cadence</h2>
+      <p>
+        One project a week. The <a href={url('/projects')}>archive</a> is sorted newest first and
+        filterable by tag. There is an <a href={url('/rss.xml')}>RSS feed</a>, and a newsletter
+        below for anyone who prefers email.
+      </p>
+
+      <h2>Disclosure</h2>
+      <p>
+        Everything on this site is educational content, not investment advice. The author may hold
+        positions in securities discussed. Nothing here is a recommendation to buy or sell anything.
+      </p>
+    </div>
+  </article>
+
+  <Newsletter />
+</BaseLayout>
+
+<style>
+  .about {
+    padding-top: 3rem;
+  }
+  .about h1 {
+    max-width: 24ch;
+    margin-bottom: 1.5rem;
+  }
+</style>

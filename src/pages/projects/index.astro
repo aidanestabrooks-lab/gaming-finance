@@ -1,0 +1,131 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+import { TAGS, tagSlug } from '../../consts';
+
+const projects = (await getCollection('projects', ({ data }) => !data.draft)).sort(
+  (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+);
+const counts = Object.fromEntries(
+  TAGS.map((t) => [t, projects.filter((p) => p.data.tags.includes(t)).length]),
+);
+---
+
+<BaseLayout title="Projects" description="Every Gaming Finance project, newest first. Filter by firms, geopolitics, game theory, or markets.">
+  <section class="wrap head">
+    <p class="kicker">Archive</p>
+    <h1>Projects</h1>
+    <p class="lede">Every week's project, newest first.</p>
+  </section>
+
+  <section class="wrap">
+    <div class="filters" role="group" aria-label="Filter by tag">
+      <button type="button" class="filter" data-filter="all" aria-pressed="true">
+        All <span class="n">{projects.length}</span>
+      </button>
+      {
+        TAGS.map((t) => (
+          <button type="button" class="filter" data-filter={tagSlug(t)} data-name={t} aria-pressed="false">
+            {t} <span class="n">{counts[t]}</span>
+          </button>
+        ))
+      }
+    </div>
+    <p class="status" id="filter-status" aria-live="polite"></p>
+
+    <div class="grid" id="project-grid">
+      {projects.map((p) => <ProjectCard project={p} />)}
+    </div>
+    <p class="empty" id="filter-empty" hidden>No projects with that tag yet.</p>
+  </section>
+</BaseLayout>
+
+<script>
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('.filter'));
+  const cards = Array.from(document.querySelectorAll<HTMLElement>('#project-grid .card'));
+  const status = document.getElementById('filter-status');
+  const empty = document.getElementById('filter-empty');
+  const valid = new Set(buttons.map((b) => b.dataset.filter));
+
+  function apply(tag: string, pushHash: boolean) {
+    if (!valid.has(tag)) tag = 'all';
+    let shown = 0;
+    let name = 'All projects';
+    for (const b of buttons) {
+      const on = b.dataset.filter === tag;
+      b.setAttribute('aria-pressed', String(on));
+      if (on && b.dataset.name) name = b.dataset.name;
+    }
+    for (const c of cards) {
+      const tags = (c.dataset.tags ?? '').split('|');
+      const show = tag === 'all' || tags.includes(tag);
+      c.hidden = !show;
+      if (show) shown++;
+    }
+    if (status) status.textContent = tag === 'all' ? '' : `${name}: ${shown} project${shown === 1 ? '' : 's'}`;
+    if (empty) empty.hidden = shown > 0;
+    if (pushHash) {
+      const hash = tag === 'all' ? '' : `#${tag}`;
+      history.replaceState(null, '', `${location.pathname}${location.search}${hash}`);
+    }
+  }
+
+  for (const b of buttons) {
+    b.addEventListener('click', () => apply(b.dataset.filter ?? 'all', true));
+  }
+  window.addEventListener('hashchange', () => apply(location.hash.slice(1) || 'all', false));
+  apply(location.hash.slice(1) || 'all', false);
+</script>
+
+<style>
+  .head {
+    padding-top: 3rem;
+    padding-bottom: 1.5rem;
+  }
+  .lede {
+    color: var(--muted);
+    font-size: 1.1rem;
+    margin: 0;
+  }
+  .filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+  .filter {
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--bg-elev);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0.4rem 0.9rem;
+    cursor: pointer;
+  }
+  .filter:hover {
+    border-color: var(--accent);
+  }
+  .filter[aria-pressed='true'] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-ink);
+  }
+  .n {
+    opacity: 0.65;
+    font-weight: 400;
+    margin-left: 0.2rem;
+  }
+  .status {
+    min-height: 1.6em;
+    color: var(--muted);
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  .empty {
+    color: var(--muted);
+    padding: 2rem 0;
+  }
+</style>

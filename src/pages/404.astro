@@ -1,0 +1,20 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { url } from '../consts';
+---
+
+<BaseLayout title="Page not found">
+  <section class="wrap nf">
+    <p class="kicker">404</p>
+    <h1>That page doesn't exist</h1>
+    <p>It may have moved, or the link was mistyped.</p>
+    <p><a class="btn" href={url('/projects')}>Browse all projects</a></p>
+  </section>
+</BaseLayout>
+
+<style>
+  .nf {
+    padding-top: 5rem;
+    padding-bottom: 4rem;
+  }
+</style>

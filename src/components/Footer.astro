@@ -1,0 +1,54 @@
+---
+import { SITE, DISCLAIMER, url } from '../consts';
+const year = new Date().getFullYear();
+const years = year > SITE.startYear ? `${SITE.startYear}–${year}` : `${year}`;
+---
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p class="disclaimer"><strong>Disclaimer.</strong> {DISCLAIMER}</p>
+    <div class="row">
+      <p class="copy">© {years} {SITE.name}. All rights reserved.</p>
+      <nav aria-label="Footer">
+        <a href={url('/projects')}>Projects</a>
+        <a href={url('/about')}>About</a>
+        <a href={url('/rss.xml')}>RSS</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: 4rem;
+    border-top: 1px solid var(--line);
+    padding: 2rem 0 2.5rem;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .disclaimer {
+    max-width: 78ch;
+    margin-bottom: 1.5rem;
+  }
+  .row {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0.75rem 1.5rem;
+  }
+  .copy {
+    margin: 0;
+  }
+  nav {
+    display: flex;
+    gap: 1.25rem;
+  }
+  nav a {
+    color: var(--muted);
+    text-decoration: none;
+  }
+  nav a:hover {
+    color: var(--text);
+    text-decoration: underline;
+  }
+</style>

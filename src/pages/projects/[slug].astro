@@ -1,0 +1,269 @@
+---
+import { getCollection, render } from 'astro:content';
+import type { CollectionEntry } from 'astro:content';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import TagPill from '../../components/TagPill.astro';
+import TakeawaysBox from '../../components/TakeawaysBox.astro';
+import Chart from '../../components/Chart.astro';
+import Newsletter from '../../components/Newsletter.astro';
+import { url, fmtDate } from '../../consts';
+
+export async function getStaticPaths() {
+  const sorted = (await getCollection('projects', ({ data }) => !data.draft)).sort(
+    (a, b) => b.data.date.valueOf() - a.data.date.valueOf(),
+  );
+  return sorted.map((project, i) => ({
+    params: { slug: project.id },
+    props: { project, newer: sorted[i - 1], older: sorted[i + 1] },
+  }));
+}
+
+interface Props {
+  project: CollectionEntry<'projects'>;
+  newer?: CollectionEntry<'projects'>;
+  older?: CollectionEntry<'projects'>;
+}
+
+const { project, newer, older } = Astro.props;
+const { title, date, week, tags, summary, takeaways, sources, charts } = project.data;
+const { Content } = await render(project);
+const hasCharts = charts.length > 0;
+---
+
+<BaseLayout title={title} description={summary} type="article">
+  <article class="wrap project">
+    <header class="head">
+      <div class="meta">
+        <span class="week">Week {week}</span>
+        <time datetime={date.toISOString()}>{fmtDate(date)}</time>
+      </div>
+      <h1>{title}</h1>
+      <p class="summary">{summary}</p>
+      <ul class="tags">
+        {tags.map((t) => <li><TagPill tag={t} /></li>)}
+      </ul>
+    </header>
+
+    <div class="prose">
+      <Content />
+    </div>
+
+    {
+      hasCharts && (
+        <section class="charts" aria-label="Charts">
+          {charts.map((c) => <Chart chart={c} />)}
+        </section>
+      )
+    }
+
+    <TakeawaysBox items={takeaways} />
+
+    {
+      sources.length > 0 && (
+        <section class="sources">
+          <h2>Sources</h2>
+          <ol>
+            {sources.map((s) => (
+              <li>
+                <a href={s.url} rel="noopener noreferrer" target="_blank">{s.title}</a>
+                <span class="host">{new URL(s.url).hostname.replace(/^www\./, '')}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )
+    }
+
+    <nav class="pager" aria-label="Other projects">
+      {
+        older ? (
+          <a class="prev" href={url(`/projects/${older.id}`)}>
+            <span class="label">Previous week</span>
+            <span class="t">{older.data.title}</span>
+          </a>
+        ) : (
+          <span />
+        )
+      }
+      {
+        newer ? (
+          <a class="next" href={url(`/projects/${newer.id}`)}>
+            <span class="label">Next week</span>
+            <span class="t">{newer.data.title}</span>
+          </a>
+        ) : (
+          <span />
+        )
+      }
+    </nav>
+  </article>
+
+  <Newsletter />
+
+  {
+    hasCharts && (
+      <>
+        <script
+          is:inline
+          src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+          crossorigin="anonymous"
+          referrerpolicy="no-referrer"
+        />
+        <script is:inline>
+          (function () {
+            if (typeof Chart === 'undefined') return;
+            var cs = getComputedStyle(document.documentElement);
+            var v = function (name) { return cs.getPropertyValue(name).trim(); };
+            var text = v('--muted');
+            var line = v('--line');
+            var palette = [v('--accent'), v('--gold'), v('--c3'), v('--c4')];
+            Chart.defaults.font.family = cs.getPropertyValue('--sans');
+            document.querySelectorAll('canvas[data-chart]').forEach(function (canvas) {
+              var cfg = JSON.parse(canvas.getAttribute('data-chart'));
+              new Chart(canvas, {
+                type: cfg.type,
+                data: {
+                  labels: cfg.labels,
+                  datasets: cfg.series.map(function (s, i) {
+                    var color = palette[i % palette.length];
+                    return {
+                      label: s.name,
+                      data: s.data,
+                      borderColor: color,
+                      backgroundColor: cfg.type === 'bar' ? color : 'transparent',
+                      borderWidth: 2,
+                      pointRadius: 3,
+                      tension: 0.25,
+                    };
+                  }),
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  plugins: {
+                    legend: { display: cfg.series.length > 1, labels: { color: text } },
+                  },
+                  scales: {
+                    x: { ticks: { color: text }, grid: { color: line } },
+                    y: { ticks: { color: text }, grid: { color: line } },
+                  },
+                },
+              });
+            });
+          })();
+        </script>
+      </>
+    )
+  }
+</BaseLayout>
+
+<style>
+  .project {
+    padding-top: 3rem;
+  }
+  .head {
+    max-width: var(--measure);
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--line);
+  }
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+  .week {
+    font-weight: 600;
+    color: var(--gold);
+    background: var(--gold-soft);
+    padding: 0.1rem 0.5rem;
+    border-radius: 3px;
+    letter-spacing: 0.03em;
+  }
+  .summary {
+    font-size: 1.2rem;
+    color: var(--muted);
+    margin-bottom: 1rem;
+  }
+  .tags {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .charts {
+    max-width: var(--measure);
+  }
+  .sources {
+    max-width: var(--measure);
+    margin-top: 2.5rem;
+    font-size: 0.95rem;
+  }
+  .sources h2 {
+    font-size: 1.1rem;
+    font-family: var(--sans);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+  .sources ol {
+    padding-left: 1.3rem;
+  }
+  .sources li {
+    margin-bottom: 0.4rem;
+  }
+  .host {
+    color: var(--muted);
+    margin-left: 0.5rem;
+    font-size: 0.85em;
+  }
+  .pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--line);
+    max-width: var(--measure);
+  }
+  .pager a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    text-decoration: none;
+    color: var(--text);
+  }
+  .pager .next {
+    text-align: right;
+  }
+  .pager .label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+  }
+  .pager .t {
+    font-family: var(--serif);
+    font-weight: 600;
+  }
+  .pager a:hover .t {
+    color: var(--accent);
+    text-decoration: underline;
+  }
+  @media (max-width: 640px) {
+    .project {
+      padding-top: 2rem;
+    }
+    .pager {
+      grid-template-columns: 1fr;
+    }
+    .pager .next {
+      text-align: left;
+    }
+  }
+</style>
