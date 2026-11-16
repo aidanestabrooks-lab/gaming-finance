@@ -66,6 +66,11 @@ Available models live in `src/components/models/`:
 | `Frontier` | Mean-variance frontier with a stock-bond correlation slider |
 | `Immunization` | Liability-driven bullet vs barbell under shifts and twists |
 | `CarryTrade` | Levered carry Monte Carlo with fat tails, jumps, VaR/CVaR |
+| `SectorModel` | Sector macro-factor betas, scenario forecaster, momentum backtest |
+| `Screener` | 80-stock screener with filters, pillar weights, CSV export |
+| `EarningsStraddle` | Option-chain implied move vs realized earnings moves, straddle P&L |
+| `EventStudy` | Market-model abnormal returns and CAR around an event |
+| `GreyMarket` | Inspection game for export-control leakage, break-even premium |
 
 LaTeX works in both `.md` and `.mdx`: inline `$x^2$`, display `$$ ... $$`.
 

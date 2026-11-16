@@ -1,0 +1,169 @@
+---
+/**
+ * Export-control leakage as an inspection game. A smuggler decides whether to
+ * route a shipment of restricted accelerators into China; the enforcer decides
+ * how hard to look. The grey-market premium is the prize, interception is the
+ * loss, and the mixed-strategy equilibrium of the inspection game gives the
+ * fraction of flows that leak and the enforcement intensity that supports it.
+ * A second panel backs out, from a reported leakage figure, the detection
+ * probability the market is behaving as if it faces, and the break-even
+ * premium at any enforcement level. Every anchor is a prop so the article can
+ * pass sourced figures.
+ */
+import DataNote from './DataNote.astro';
+
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+  /** US price of the reference accelerator or server, in dollars. */
+  usPrice: number;
+  /** Grey-market price in China as a multiple of the US price. */
+  premium: number;
+  /** Smuggling cost as a fraction of US price (intermediaries, transshipment, bribes, financing). */
+  cost: number;
+  /** Per-shipment probability of interception at the default enforcement level. */
+  detect: number;
+  /** Loss if intercepted, as a multiple of shipment value (seizure = 1, plus fines and forfeited prepayments). */
+  penalty: number;
+  /** Reported leakage, dollars per quarter. */
+  reportedFlow: number;
+  /** Addressable Chinese demand for restricted accelerators, dollars per quarter. */
+  demand: number;
+  /** Enforcer's cost of a full inspection posture, dollars per quarter. */
+  enforceCost: number;
+  /** Enforcer's valuation of stopping one quarter of leakage, dollars (policy value, not a cash flow). */
+  enforceValue: number;
+  sources: { name: string; asOf?: string; url?: string }[];
+  dataNote?: string;
+}
+const {
+  id, title = 'Grey-market accelerators: the inspection game', note, usPrice, premium, cost, detect, penalty, reportedFlow, demand, enforceCost, enforceValue, sources, dataNote,
+} = Astro.props;
+const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+const cfg = { usPrice, premium, cost, detect, penalty, reportedFlow, demand, enforceCost, enforceValue };
+const fmtPct = (x: number, d = 0) => `${(100 * x).toFixed(d)}%`;
+const defaultNote = `Reference unit at $${usPrice.toLocaleString('en-US')} in the US and ${premium.toFixed(2)}× that in China's grey market. Reported leakage $${(reportedFlow / 1e9).toFixed(1)}B per quarter against $${(demand / 1e9).toFixed(1)}B of addressable demand.`;
+---
+
+<div class="model" data-model="grey" id={id}>
+  <script is:inline type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    <p class="model-note">{note ?? defaultNote}</p>
+  </div>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Grey-market premium (× US price)</span><output data-o="prem">{premium.toFixed(2)}×</output></span><input type="range" min="1" max="4" step="0.05" value={r4(premium)} data-in="prem" /></label>
+    <label class="ctl"><span class="lab"><span>Smuggling cost (% of US price)</span><output data-o="cost">{fmtPct(cost)}</output></span><input type="range" min="0" max="1" step="0.01" value={r4(cost)} data-in="cost" /></label>
+    <label class="ctl"><span class="lab"><span>Detection probability per shipment</span><output data-o="q">{fmtPct(detect)}</output></span><input type="range" min="0" max="0.95" step="0.01" value={r4(detect)} data-in="q" /></label>
+    <label class="ctl"><span class="lab"><span>Loss if caught (× shipment value)</span><output data-o="pen">{penalty.toFixed(1)}×</output></span><input type="range" min="1" max="5" step="0.1" value={r4(penalty)} data-in="pen" /></label>
+    <label class="ctl"><span class="lab"><span>Addressable demand ($B / quarter)</span><output data-o="dem">{(demand / 1e9).toFixed(1)}</output></span><input type="range" min="1" max="60" step="0.5" value={r4(demand / 1e9)} data-in="dem" /></label>
+    <label class="ctl"><span class="lab"><span>Enforcement cost, full posture ($M / quarter)</span><output data-o="ec">{(enforceCost / 1e6).toFixed(0)}</output></span><input type="range" min="10" max="2000" step="10" value={Math.round(enforceCost / 1e6)} data-in="ec" /></label>
+    <label class="ctl"><span class="lab"><span>Enforcer's value of stopping leakage ($B / quarter)</span><output data-o="ev">{(enforceValue / 1e9).toFixed(1)}</output></span><input type="range" min="0.1" max="50" step="0.1" value={r4(enforceValue / 1e9)} data-in="ev" /></label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Smuggler's expected margin per $1 shipped</div><div class="v" data-out="margin">–</div><div class="k" data-out="margink">–</div></div>
+    <div class="stat"><div class="k">Break-even detection probability</div><div class="v" data-out="qstar">–</div><div class="k">above this the trade stops at the current premium</div></div>
+    <div class="stat"><div class="k">Break-even premium at current enforcement</div><div class="v" data-out="pstar">–</div><div class="k">below this nobody ships</div></div>
+    <div class="stat"><div class="k">Inspection game: equilibrium inspection rate</div><div class="v" data-out="pin">–</div><div class="k">makes the smuggler indifferent</div></div>
+    <div class="stat"><div class="k">Inspection game: equilibrium smuggling rate</div><div class="v" data-out="ps">–</div><div class="k">share of demand that leaks; makes the enforcer indifferent</div></div>
+    <div class="stat"><div class="k">Implied leakage vs reported</div><div class="v" data-out="flow">–</div><div class="k" data-out="flowk">–</div></div>
+    <div class="stat"><div class="k">Detection probability consistent with the reported flow</div><div class="v" data-out="qimp">–</div><div class="k">if smugglers are risk-neutral and demand is price-elastic as below</div></div>
+    <div class="stat"><div class="k">Expected seizures per quarter at current inputs</div><div class="v" data-out="seized">–</div></div>
+  </div>
+  <p class="readout"><strong>Break-even premium against detection probability.</strong> The curve is the premium a smuggler needs to break even at each interception rate; the dot is the current inputs. Points above the curve are profitable to ship; the shaded region is where enforcement alone closes the arbitrage.</p>
+  <svg class="curve" viewBox="0 0 720 240" role="img" aria-label="Break-even premium versus detection probability"></svg>
+  <DataNote sources={sources} note={dataNote ?? 'The premium, cost, detection, penalty, demand and enforcement figures are anchors from the cited reporting; the equilibrium is a mixed-strategy inspection game, which describes incentives, not a forecast of any shipment.'} />
+</div>
+
+<script>
+  import { fmt } from '../../lib/stats';
+  import { el, clear, scale, path, ticks } from '../../lib/svg';
+
+  interface Cfg { usPrice: number; premium: number; cost: number; detect: number; penalty: number; reportedFlow: number; demand: number; enforceCost: number; enforceValue: number }
+
+  function init(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.querySelector('script[data-cfg]')!.textContent!);
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const svg = root.querySelector<SVGSVGElement>('svg.curve')!;
+
+    const update = () => {
+      const prem = +q('prem').value, cost = +q('cost').value, qd = +q('q').value, pen = +q('pen').value;
+      const dem = +q('dem').value * 1e9, ec = +q('ec').value * 1e6, ev = +q('ev').value * 1e9;
+      o('prem').textContent = `${prem.toFixed(2)}×`; o('cost').textContent = fmt.pct(cost, 0); o('q').textContent = fmt.pct(qd, 0); o('pen').textContent = `${pen.toFixed(1)}×`;
+      o('dem').textContent = (dem / 1e9).toFixed(1); o('ec').textContent = (ec / 1e6).toFixed(0); o('ev').textContent = (ev / 1e9).toFixed(1);
+
+      // Smuggler: per $1 of US-price goods shipped. Not caught: sell at prem, net of cost. Caught: lose the goods plus penalty.
+      const gain = prem - 1 - cost; // margin if it gets through
+      const loss = 1 + cost + (pen - 1); // capital lost if intercepted (goods, sunk cost, fines)
+      const margin = (1 - qd) * gain - qd * loss;
+      const me = out('margin');
+      me.textContent = `${margin >= 0 ? '+' : '−'}$${Math.abs(margin).toFixed(2)}`;
+      me.className = 'v ' + (margin >= 0 ? 'pos' : 'neg');
+      out('margink').textContent = `gets through: +$${gain.toFixed(2)} · intercepted: −$${loss.toFixed(2)}`;
+      const qstar = gain > 0 ? gain / (gain + loss) : 0;
+      out('qstar').textContent = fmt.pct(qstar, 0);
+      const pstar = 1 + cost + (qd * (1 + cost + pen - 1)) / Math.max(1e-9, 1 - qd);
+      out('pstar').textContent = `${pstar.toFixed(2)}× US price`;
+
+      // Inspection game. Enforcer: inspect (cost ec) and catch a fraction of leakage, or not. Smuggler: ship or not.
+      // Smuggler indifferent when the inspection probability equals the break-even detection rate.
+      // Enforcer indifferent when the smuggling rate s solves s·ev·(catch value) = ec, i.e. s* = ec / ev.
+      const pin = qstar;
+      const ps = Math.min(1, ec / Math.max(1e-9, ev));
+      out('pin').textContent = fmt.pct(pin, 0);
+      out('ps').textContent = fmt.pct(ps, 1);
+      const flow = ps * dem;
+      out('flow').textContent = `$${(flow / 1e9).toFixed(2)}B vs $${(cfg.reportedFlow / 1e9).toFixed(1)}B reported per quarter`;
+      out('flowk').textContent = flow > cfg.reportedFlow ? 'model leaks more than the reporting found' : 'reporting found more than the model predicts: enforcement value is overstated or the inspection cost understated';
+      // Detection probability consistent with the reported flow under linear demand that falls with the premium:
+      // leakage share = reportedFlow / demand; assume share = 1 − (pstar(q) − 1) / (prem_max − 1) with prem_max = 4.
+      const share = Math.min(1, cfg.reportedFlow / dem);
+      // Solve pstar(q) = 1 + (1 − share)(4 − 1) for q by bisection.
+      const target = 1 + (1 - share) * 3;
+      let lo = 0, hi = 0.99;
+      for (let i = 0; i < 60; i++) {
+        const mid = (lo + hi) / 2;
+        const p = 1 + cost + (mid * (cost + pen)) / (1 - mid);
+        if (p < target) lo = mid; else hi = mid;
+      }
+      out('qimp').textContent = fmt.pct((lo + hi) / 2, 0);
+      out('seized').textContent = `$${((qd * flow) / 1e6).toFixed(0)}M of goods (${fmt.pct(qd, 0)} of $${(flow / 1e9).toFixed(2)}B)`;
+
+      // Curve
+      clear(svg);
+      const box = { left: 56, right: 700, top: 14, bottom: 190 };
+      const maxP = 4;
+      const sx = scale(0, 0.9, box.left, box.right), sy = scale(1, maxP, box.bottom, box.top);
+      const g = el('g');
+      for (const v of ticks(1, maxP, 6)) {
+        g.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(v), y2: sy(v), class: 'grid' }));
+        g.appendChild(el('text', { x: box.left - 6, y: sy(v) + 4, class: 'tick', 'text-anchor': 'end' }, `${v.toFixed(1)}×`));
+      }
+      for (const v of ticks(0, 0.9, 9)) g.appendChild(el('text', { x: sx(v), y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, fmt.pct(v, 0)));
+      g.appendChild(el('line', { x1: box.left, x2: box.right, y1: box.bottom, y2: box.bottom, class: 'axis' }));
+      svg.appendChild(g);
+      const pts: [number, number][] = [];
+      for (let x = 0; x <= 0.9; x += 0.005) {
+        const p = 1 + cost + (x * (cost + pen)) / (1 - x);
+        if (p > maxP) break;
+        pts.push([sx(x), sy(p)]);
+      }
+      const lastPt = pts[pts.length - 1];
+      svg.appendChild(el('path', { d: path([...pts, [lastPt[0], sy(maxP)], [box.left, sy(maxP)]]) + 'Z', fill: 'var(--gold-soft)', opacity: 0.6 }));
+      svg.appendChild(el('path', { d: path(pts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2 }));
+      svg.appendChild(el('text', { x: box.left + 10, y: sy(maxP) + 14, class: 'lbl muted' }, 'enforcement closes the arbitrage'));
+      svg.appendChild(el('text', { x: box.right - 6, y: box.bottom - 8, class: 'lbl muted', 'text-anchor': 'end' }, 'profitable to ship'));
+      if (prem <= maxP) {
+        svg.appendChild(el('circle', { cx: sx(Math.min(0.9, qd)), cy: sy(prem), r: 6, fill: margin >= 0 ? 'var(--neg)' : 'var(--pos)', stroke: 'var(--bg-elev)', 'stroke-width': 1.5 }));
+        svg.appendChild(el('text', { x: sx(Math.min(0.9, qd)) + 9, y: sy(prem) + 4, class: 'lbl' }, `now: ${prem.toFixed(2)}× at ${fmt.pct(qd, 0)} detection`));
+      }
+      svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 226, class: 'lbl muted', 'text-anchor': 'middle' }, 'Detection probability per shipment'));
+    };
+    ['prem', 'cost', 'q', 'pen', 'dem', 'ec', 'ev'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+  document.querySelectorAll<HTMLElement>('[data-model="grey"]').forEach(init);
+</script>

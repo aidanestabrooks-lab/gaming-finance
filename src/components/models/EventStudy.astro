@@ -1,0 +1,199 @@
+---
+/**
+ * Market-model event study (CFA Level II equity: event studies and abnormal
+ * returns). NVDA's daily log return is regressed on the SMH semiconductor ETF
+ * over an estimation window that ends a few days before the event; from the
+ * event date on, the abnormal return is the residual and the cumulative
+ * abnormal return (CAR) is its running sum, with a ±2σ√n band from the
+ * estimation-window residual volatility. Peers are shown as plain cumulative
+ * returns from the close before the event so the reader can see what the
+ * sector did at the same time. The estimation window and the event date are
+ * re-estimated in the browser.
+ */
+import { nvidia, nvidiaEventStudy, align, logReturns, companies, companySnapshot, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+  eventDate?: string;
+  /** Candidate event dates offered in the selector, with labels. */
+  events?: { date: string; label: string }[];
+}
+const {
+  id, title = 'Event study: NVDA abnormal return around the succession news', note, eventDate = '2026-11-11',
+  events = [
+    { date: '2026-11-11', label: 'Nov 11, 2026: resignation reported' },
+    { date: '2026-11-12', label: 'Nov 12, 2026: 8-K, interim CEO named' },
+    { date: '2026-11-10', label: 'Nov 10, 2026: one day earlier (robustness)' },
+  ],
+} = Astro.props;
+
+const study = nvidiaEventStudy(eventDate);
+// Ship aligned daily returns for the last two years so the browser can re-estimate.
+const al = align([nvidia, nvidia.bench]);
+const cut = Math.max(0, al.dates.length - 520);
+const dates = al.dates.slice(cut + 1);
+const r = logReturns(al.close[0].slice(cut)).map((x) => +x.toFixed(5));
+const rm = logReturns(al.close[1].slice(cut)).map((x) => +x.toFixed(5));
+const shares = companySnapshot(companies.get('NVDA')).shares;
+const preClose = (() => {
+  const i = nvidia.dates.findIndex((d) => d >= eventDate);
+  return nvidia.close[Math.max(0, i - 1)];
+})();
+const peers = Object.fromEntries(Object.entries(study.peers).map(([t, p]) => [t, { name: p.name, rows: p.rows }]));
+const cfg = { dates, r, rm, peers, shares, preClose, events, eventDate };
+const fmtPct = (x: number, d = 1) => `${(100 * x).toFixed(d)}%`;
+const last = study.rows[study.rows.length - 1];
+const defaultNote = `NVDA on SMH, estimation window ${shortDate(study.estStart)} to ${shortDate(study.estEnd)} (${study.estDays} sessions, ending ${study.gap} sessions before the event). Abnormal returns run from ${shortDate(eventDate)} to ${shortDate(last.date)}.`;
+---
+
+<div class="model" data-model="event" id={id}>
+  <script is:inline type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    <p class="model-note">{note ?? defaultNote}</p>
+  </div>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Event date</span></span>
+      <select data-in="ev">{events.map((e) => <option value={e.date} selected={e.date === eventDate}>{e.label}</option>)}</select>
+    </label>
+    <label class="ctl"><span class="lab"><span>Estimation window (sessions)</span><output data-o="win">250</output></span><input type="range" min="60" max="480" step="10" value="250" data-in="win" /></label>
+    <label class="ctl"><span class="lab"><span>Gap before event (sessions)</span><output data-o="gap">5</output></span><input type="range" min="0" max="20" step="1" value="5" data-in="gap" /></label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Market model: β on SMH, α (daily), R²</div><div class="v" data-out="model">–</div></div>
+    <div class="stat"><div class="k">Residual σ (daily)</div><div class="v" data-out="sig">–</div></div>
+    <div class="stat"><div class="k">CAR since the event</div><div class="v" data-out="car">–</div><div class="k" data-out="cark">–</div></div>
+    <div class="stat"><div class="k">t-statistic (CAR ÷ σ√n)</div><div class="v" data-out="t">–</div></div>
+    <div class="stat"><div class="k">Raw return since the close before the event</div><div class="v" data-out="raw">–</div><div class="k" data-out="rawk">–</div></div>
+    <div class="stat"><div class="k">Abnormal value change (CAR × pre-event market cap)</div><div class="v" data-out="usd">–</div></div>
+  </div>
+  <svg class="car" viewBox="0 0 720 240" role="img" aria-label="Cumulative abnormal return with confidence band"></svg>
+  <div class="legend"><span><i style="background: var(--c1)"></i>CAR (abnormal vs SMH)</span><span><i style="background: var(--gold-soft)"></i>±2σ√n band under no abnormal return</span><span><i style="background: var(--muted)"></i>Raw NVDA return</span></div>
+  <p class="readout"><strong>Peers since the close before the event</strong> (plain cumulative returns, not abnormal): the chip benchmark, the names most often mentioned in the succession reporting, and the main foundry and rivals.</p>
+  <svg class="peers" viewBox="0 0 720 240" role="img" aria-label="Cumulative returns of NVDA and peers since the event"></svg>
+  <div class="legend" data-out="plegend"></div>
+  <DataNote
+    sources={[
+      { name: 'Yahoo Finance: NVDA, SMH, AMD, AVGO, TSM, ARM, MRVL adjusted daily closes', asOf: nvidia.asOf, url: 'https://finance.yahoo.com/quote/NVDA/history/' },
+      { name: 'Yahoo Finance: NVDA shares outstanding (latest quarter)', asOf: companies.fetched, url: 'https://finance.yahoo.com/quote/NVDA/' },
+    ]}
+    note="Derived: OLS of NVDA log returns on SMH over the estimation window; abnormal return = actual − (α + β × SMH); CAR = cumulative sum from the event date; the band assumes independent residuals with the estimation-window σ. Returns refresh daily, so the CAR extends automatically."
+  />
+</div>
+
+<script>
+  import { fmt } from '../../lib/stats';
+  import { el, clear, scale, path, ticks } from '../../lib/svg';
+
+  interface Cfg { dates: string[]; r: number[]; rm: number[]; peers: Record<string, { name: string; rows: [string, number][] }>; shares: number; preClose: number; events: { date: string; label: string }[]; eventDate: string }
+
+  const COLORS = ['var(--c1)', 'var(--c2)', 'var(--c3)', 'var(--c4)', 'var(--c5)', 'var(--c6)', 'var(--gold)'];
+
+  function init(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.querySelector('script[data-cfg]')!.textContent!);
+    const q = (k: string) => root.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const carSvg = root.querySelector<SVGSVGElement>('svg.car')!;
+    const peerSvg = root.querySelector<SVGSVGElement>('svg.peers')!;
+
+    const update = () => {
+      const ev = q('ev').value, win = +q('win').value, gap = +q('gap').value;
+      o('win').textContent = String(win); o('gap').textContent = String(gap);
+      const e = cfg.dates.findIndex((d) => d >= ev);
+      const s0 = Math.max(0, e - gap - win), s1 = Math.max(s0 + 10, e - gap);
+      const xs = cfg.rm.slice(s0, s1), ys = cfg.r.slice(s0, s1);
+      const n = xs.length;
+      const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+      let sxy = 0, sxx = 0, sst = 0;
+      for (let i = 0; i < n; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) ** 2; sst += (ys[i] - my) ** 2; }
+      const beta = sxy / sxx, alpha = my - beta * mx;
+      let sse = 0;
+      for (let i = 0; i < n; i++) sse += (ys[i] - alpha - beta * xs[i]) ** 2;
+      const sig = Math.sqrt(sse / (n - 2));
+      out('model').textContent = `β ${beta.toFixed(2)}, α ${fmt.pct(alpha, 3)}, R² ${(1 - sse / sst).toFixed(2)}`;
+      out('sig').textContent = `${fmt.pct(sig, 2)} (${fmt.pct(sig * Math.sqrt(252), 0)} annualized)`;
+      const pre = 5;
+      const rows: { date: string; ar: number; car: number; raw: number; k: number }[] = [];
+      let car = 0, raw = 0, k = 0;
+      for (let i = Math.max(0, e - pre); i < cfg.r.length; i++) {
+        const ar = cfg.r[i] - alpha - beta * cfg.rm[i];
+        if (i >= e) { car += ar; raw += cfg.r[i]; k++; }
+        rows.push({ date: cfg.dates[i], ar, car, raw: Math.exp(raw) - 1, k });
+      }
+      const lastRow = rows[rows.length - 1];
+      const carS = Math.exp(car) - 1;
+      const ce = out('car');
+      ce.textContent = `${carS >= 0 ? '+' : '−'}${fmt.pct(Math.abs(carS), 1)}`;
+      ce.className = 'v ' + (carS >= 0 ? 'pos' : 'neg');
+      out('cark').textContent = `${lastRow.k} sessions from ${ev} to ${lastRow.date}`;
+      const t = car / (sig * Math.sqrt(Math.max(1, lastRow.k)));
+      out('t').textContent = `${t.toFixed(2)} ${Math.abs(t) > 2.58 ? '(significant at 1%)' : Math.abs(t) > 1.96 ? '(significant at 5%)' : '(not significant)'}`;
+      const re = out('raw');
+      re.textContent = `${lastRow.raw >= 0 ? '+' : '−'}${fmt.pct(Math.abs(lastRow.raw), 1)}`;
+      re.className = 'v ' + (lastRow.raw >= 0 ? 'pos' : 'neg');
+      const smh = cfg.peers.SMH?.rows;
+      out('rawk').textContent = smh ? `SMH over the same window: ${fmt.pct(smh[smh.length - 1][1], 1)}` : '';
+      const mcap = cfg.preClose * cfg.shares;
+      out('usd').textContent = `${carS >= 0 ? '+' : '−'}$${(Math.abs(carS * mcap) / 1e9).toFixed(0)}B on a $${(mcap / 1e12).toFixed(2)}T base`;
+
+      // CAR chart
+      clear(carSvg);
+      const box = { left: 56, right: 700, top: 14, bottom: 190 };
+      const band = rows.map((x) => 2 * sig * Math.sqrt(x.k));
+      const lo = Math.min(...rows.map((x) => Math.min(x.car, x.raw)), -Math.max(...band)) * 1.1;
+      const hi = Math.max(...rows.map((x) => Math.max(x.car, x.raw)), Math.max(...band), 0.02) * 1.1;
+      const sx = scale(0, rows.length - 1, box.left, box.right), sy = scale(lo, hi, box.bottom, box.top);
+      const g = el('g');
+      for (const v of ticks(lo, hi, 5)) {
+        g.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(v), y2: sy(v), class: 'grid' }));
+        g.appendChild(el('text', { x: box.left - 6, y: sy(v) + 4, class: 'tick', 'text-anchor': 'end' }, fmt.pct(v, 0)));
+      }
+      rows.forEach((x, i) => { if (i % Math.max(1, Math.floor(rows.length / 8)) === 0 || i === rows.length - 1) g.appendChild(el('text', { x: sx(i), y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, x.date.slice(5))); });
+      g.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(0), y2: sy(0), class: 'axis' }));
+      carSvg.appendChild(g);
+      const up: [number, number][] = rows.map((x, i) => [sx(i), sy(band[i])]);
+      const dn: [number, number][] = rows.map((x, i) => [sx(i), sy(-band[i])]).reverse();
+      carSvg.appendChild(el('path', { d: path([...up, ...dn]) + 'Z', fill: 'var(--gold-soft)', opacity: 0.8 }));
+      const ei = rows.findIndex((x) => x.date >= ev);
+      carSvg.appendChild(el('line', { x1: sx(ei), x2: sx(ei), y1: box.top, y2: box.bottom, stroke: 'var(--gold)', 'stroke-dasharray': '4 3' }));
+      carSvg.appendChild(el('text', { x: sx(ei) + 4, y: box.top + 12, class: 'lbl muted' }, 'event'));
+      carSvg.appendChild(el('path', { d: path(rows.map((x, i) => [sx(i), sy(x.raw)])), fill: 'none', stroke: 'var(--muted)', 'stroke-width': 1.3, 'stroke-dasharray': '3 3' }));
+      carSvg.appendChild(el('path', { d: path(rows.map((x, i) => [sx(i), sy(x.car)])), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2.2 }));
+      carSvg.appendChild(el('text', { x: sx(rows.length - 1) - 4, y: sy(lastRow.car) - 8, class: 'lbl', 'text-anchor': 'end' }, `CAR ${fmt.pct(carS, 1)}`));
+
+      // Peers chart (cumulative since the close before the event date; shipped series use the default event date).
+      clear(peerSvg);
+      const names = Object.keys(cfg.peers);
+      const all = names.flatMap((t) => cfg.peers[t].rows.map((x) => x[1]));
+      const plo = Math.min(...all, -0.02) * 1.1, phi = Math.max(...all, 0.02) * 1.1;
+      const L = Math.max(...names.map((t) => cfg.peers[t].rows.length));
+      const px = scale(0, L - 1, box.left, box.right), py = scale(plo, phi, box.bottom, box.top);
+      const g2 = el('g');
+      for (const v of ticks(plo, phi, 5)) {
+        g2.appendChild(el('line', { x1: box.left, x2: box.right, y1: py(v), y2: py(v), class: 'grid' }));
+        g2.appendChild(el('text', { x: box.left - 6, y: py(v) + 4, class: 'tick', 'text-anchor': 'end' }, fmt.pct(v, 0)));
+      }
+      g2.appendChild(el('line', { x1: box.left, x2: box.right, y1: py(0), y2: py(0), class: 'axis' }));
+      const ref = cfg.peers.NVDA.rows;
+      ref.forEach((x, i) => { if (i % Math.max(1, Math.floor(L / 8)) === 0 || i === L - 1) g2.appendChild(el('text', { x: px(i), y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, x[0].slice(5))); });
+      peerSvg.appendChild(g2);
+      const legend = out('plegend');
+      legend.innerHTML = '';
+      names.forEach((t, j) => {
+        const rowsP = cfg.peers[t].rows;
+        peerSvg.appendChild(el('path', { d: path(rowsP.map((x, i) => [px(i), py(x[1])])), fill: 'none', stroke: COLORS[j % COLORS.length], 'stroke-width': t === 'NVDA' ? 2.6 : 1.4, opacity: t === 'NVDA' ? 1 : 0.85 }));
+        const lastP = rowsP[rowsP.length - 1][1];
+        const span = document.createElement('span');
+        span.innerHTML = `<i style="background:${COLORS[j % COLORS.length]}"></i>${t} ${lastP >= 0 ? '+' : '−'}${fmt.pct(Math.abs(lastP), 1)}`;
+        legend.appendChild(span);
+      });
+    };
+    ['ev', 'win', 'gap'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+  document.querySelectorAll<HTMLElement>('[data-model="event"]').forEach(init);
+</script>

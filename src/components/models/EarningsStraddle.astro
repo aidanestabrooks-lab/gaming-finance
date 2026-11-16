@@ -1,0 +1,206 @@
+---
+/**
+ * What the option market charges for not knowing. Uses the live NVDA option
+ * chain: the at-the-money straddle at every listed expiry gives the implied
+ * move; the first post-earnings expiry contains the earnings jump plus a few
+ * days of ordinary diffusion, so subtracting the diffusion implied by the
+ * long-dated vol isolates the one-day earnings move the market is paying for.
+ * That is compared with the realized next-day move after each of the last
+ * reports. The long-dated implied vol against trailing realized vol is the
+ * persistent uncertainty premium, which is where a succession question shows
+ * up. A straddle P&L panel prices the trade for any realized move.
+ */
+import { nvidia, earningsMoves, realizedVol, shortDate, type OptionExpiry } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+  /** Report date whose straddle is studied (YYYY-MM-DD). Defaults to the last entry in the earnings list. */
+  reportDate?: string;
+}
+const lastReport = nvidia.earnings[nvidia.earnings.length - 1][1];
+const { id, title = 'Earnings straddle: implied move, realized moves, and the uncertainty premium', note, reportDate = lastReport } = Astro.props;
+
+const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+const spot = nvidia.spot;
+const moves = earningsMoves();
+const vol1y = realizedVol(nvidia.close, 252);
+const vol3m = realizedVol(nvidia.close, 63);
+const benchVol1y = realizedVol(nvidia.bench.close, 252);
+const options: OptionExpiry[] = nvidia.options;
+// First expiry strictly after the report date carries the earnings jump.
+const eventExp = options.find((o) => o.expiration > reportDate) ?? options[0];
+// Long-dated vol: the expiry closest to 90 days out, as the diffusion baseline.
+const longExp = options.reduce((best, o) => (Math.abs(o.days - 90) < Math.abs(best.days - 90) ? o : best), options[0]);
+const ivOf = (o: OptionExpiry) => (o.call.iv + o.put.iv) / 2;
+const sigmaLong = ivOf(longExp);
+// Implied one-day earnings move: total variance to the event expiry minus diffusion over its remaining days.
+const T1 = Math.max(1, eventExp.days) / 365;
+const sigmaEvent = eventExp.impliedMove / 0.7979 / Math.sqrt(T1); // straddle/spot ≈ 0.8 σ √T
+const jumpVar = Math.max(0, sigmaEvent * sigmaEvent * T1 - sigmaLong * sigmaLong * Math.max(0, eventExp.days - 1) / 365);
+const impliedEarningsStd = Math.sqrt(jumpVar);
+const impliedEarningsAbs = 0.7979 * impliedEarningsStd;
+const absMoves = moves.map((m) => Math.abs(m.move));
+const meanAbs = absMoves.length ? absMoves.reduce((a, b) => a + b, 0) / absMoves.length : 0;
+const stdMoves = moves.length > 1 ? Math.sqrt(moves.reduce((a, m) => a + m.move * m.move, 0) / moves.length) : 0;
+const pastReports = moves.filter((m) => m.date < reportDate);
+const cfg = { spot, options, moves, vol1y, vol3m, benchVol1y, eventExp: eventExp.expiration, longExp: longExp.expiration, reportDate };
+const fmtPct = (x: number, d = 1) => `${(100 * x).toFixed(d)}%`;
+const defaultNote = `${nvidia.name} at $${spot.toFixed(2)} (${shortDate(nvidia.asOf)}). At-the-money straddles at ${options.length} listed expiries; the ${shortDate(eventExp.expiration)} expiry is the first after the ${shortDate(reportDate)} report.`;
+---
+
+<div class="model" data-model="straddle" id={id}>
+  <script is:inline type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    <p class="model-note">{note ?? defaultNote}</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Straddle to {shortDate(eventExp.expiration)} (strike {eventExp.strike})</div><div class="v">${eventExp.straddle.toFixed(2)} = {fmtPct(eventExp.impliedMove)}</div><div class="k">{eventExp.days} days, call IV {fmtPct(eventExp.call.iv, 0)}, put IV {fmtPct(eventExp.put.iv, 0)}</div></div>
+    <div class="stat"><div class="k">Implied one-day earnings move (expected |move|)</div><div class="v">{fmtPct(impliedEarningsAbs)}</div><div class="k">σ {fmtPct(impliedEarningsStd)}, after removing diffusion at {fmtPct(sigmaLong, 0)} vol</div></div>
+    <div class="stat"><div class="k">Realized |move| after the last {pastReports.length} reports</div><div class="v">{fmtPct(meanAbs)} mean</div><div class="k">root-mean-square {fmtPct(stdMoves)}, max {fmtPct(Math.max(...absMoves))}</div></div>
+    <div class="stat"><div class="k">Event premium: implied minus average realized</div><div class:list={['v', impliedEarningsAbs > meanAbs ? 'neg' : 'pos']}>{impliedEarningsAbs >= meanAbs ? '+' : '−'}{fmtPct(Math.abs(impliedEarningsAbs - meanAbs))}</div><div class="k">what buyers pay above the historical print</div></div>
+    <div class="stat"><div class="k">Long-dated implied vol ({shortDate(longExp.expiration)})</div><div class="v">{fmtPct(sigmaLong, 0)}</div><div class="k">vs realized: 1y {fmtPct(vol1y, 0)}, 3m {fmtPct(vol3m, 0)}; SMH 1y {fmtPct(benchVol1y, 0)}</div></div>
+    <div class="stat"><div class="k">Persistent uncertainty premium (IV − 1y realized)</div><div class="v">{sigmaLong >= vol1y ? '+' : '−'}{fmtPct(Math.abs(sigmaLong - vol1y), 0)} vol pts</div><div class="k">priced for months, not one print</div></div>
+  </div>
+
+  <p class="readout"><strong>Term structure.</strong> Implied move (straddle ÷ spot) at each expiry. The dashed line is what the long-dated vol alone would imply at √time; the gap at the front is the earnings jump. The dotted line uses one-year realized vol instead: the gap between dashed and dotted is the persistent premium.</p>
+  <svg class="term" viewBox="0 0 720 230" role="img" aria-label="Implied move by expiry versus diffusion-only lines"></svg>
+  <div class="legend"><span><i style="background: var(--c1)"></i>ATM straddle implied move</span><span><i style="background: var(--c2)"></i>√t at long-dated IV</span><span><i style="background: var(--muted)"></i>√t at 1y realized vol</span></div>
+
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Expiry</span></span>
+      <select data-in="exp">{options.map((o) => <option value={o.expiration} selected={o.expiration === eventExp.expiration}>{o.expiration} · {o.days}d · {fmtPct(o.impliedMove)}</option>)}</select>
+    </label>
+    <label class="ctl"><span class="lab"><span>Position</span></span>
+      <select data-in="side"><option value="1">Long straddle (pay for the move)</option><option value="-1">Short straddle (sell the move)</option></select>
+    </label>
+    <label class="ctl"><span class="lab"><span>Realized move at expiry</span><output data-o="mv">+0.0%</output></span><input type="range" min="-0.4" max="0.4" step="0.005" value="0" data-in="mv" /></label>
+    <label class="ctl"><span class="lab"><span>Contracts (100 shares each)</span><output data-o="n">10</output></span><input type="range" min="1" max="100" step="1" value="10" data-in="n" /></label>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="k">Straddle cost (mid) / implied move</div><div class="v" data-out="cost">–</div></div>
+    <div class="stat"><div class="k">Breakevens at expiry</div><div class="v" data-out="be">–</div></div>
+    <div class="stat"><div class="k">P&L at the chosen move</div><div class="v" data-out="pnl">–</div><div class="k" data-out="pnlk">–</div></div>
+    <div class="stat"><div class="k">Share of past prints beyond the breakeven</div><div class="v" data-out="hit">–</div><div class="k">using the realized moves below as the sample</div></div>
+  </div>
+  <svg class="pnl" viewBox="0 0 720 220" role="img" aria-label="Straddle payoff at expiry"></svg>
+
+  <p class="readout"><strong>Realized next-session moves after each report</strong> (close on the report day to the next close; reports are after the bell).</p>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Quarter</th><th>Report date</th><th>Close before</th><th>Close after</th><th>Move</th></tr></thead>
+      <tbody>
+        {moves.map((m) => <tr><td>{m.label}</td><td>{m.date}</td><td>${m.before.toFixed(2)}</td><td>${m.after.toFixed(2)}</td><td class={m.move >= 0 ? 'pos' : 'neg'}>{m.move >= 0 ? '+' : '−'}{fmtPct(Math.abs(m.move))}</td></tr>)}
+      </tbody>
+    </table>
+  </div>
+  <DataNote
+    sources={[
+      { name: 'Yahoo Finance: NVDA option chain (bid, ask, open interest, implied volatility)', asOf: nvidia.fetched, url: 'https://finance.yahoo.com/quote/NVDA/options/' },
+      { name: 'Yahoo Finance: NVDA and SMH adjusted daily closes', asOf: nvidia.asOf, url: 'https://finance.yahoo.com/quote/NVDA/history/' },
+    ]}
+    note="Derived: implied move = ATM straddle mid ÷ spot; the one-day earnings move subtracts √time diffusion at the 90-day implied vol; realized moves are close-to-close around the report dates listed in the fetch script. Quotes are a build-time snapshot refreshed daily, not a live feed."
+  />
+</div>
+
+<script>
+  import { fmt } from '../../lib/stats';
+  import { el, clear, scale, path, ticks } from '../../lib/svg';
+
+  interface OQ { bid: number; ask: number; mid: number; iv: number; oi: number; vol: number }
+  interface OE { expiration: string; days: number; strike: number; call: OQ; put: OQ; straddle: number; impliedMove: number; totalOI: number; putCallOI: number }
+  interface Cfg { spot: number; options: OE[]; moves: { label: string; date: string; move: number }[]; vol1y: number; vol3m: number; benchVol1y: number; eventExp: string; longExp: string; reportDate: string }
+
+  function drawTerm(svg: SVGSVGElement, cfg: Cfg) {
+    clear(svg);
+    const box = { left: 52, right: 700, top: 14, bottom: 180 };
+    const maxD = Math.max(...cfg.options.map((o) => o.days), 30);
+    const longE = cfg.options.find((o) => o.expiration === cfg.longExp) ?? cfg.options[cfg.options.length - 1];
+    const sigL = (longE.call.iv + longE.put.iv) / 2;
+    const maxY = Math.max(...cfg.options.map((o) => o.impliedMove), 0.7979 * sigL * Math.sqrt(maxD / 365)) * 1.1;
+    const sx = scale(0, maxD, box.left, box.right), sy = scale(0, maxY, box.bottom, box.top);
+    const g = el('g');
+    for (const v of ticks(0, maxY, 5)) {
+      g.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(v), y2: sy(v), class: 'grid' }));
+      g.appendChild(el('text', { x: box.left - 6, y: sy(v) + 4, class: 'tick', 'text-anchor': 'end' }, fmt.pct(v, 0)));
+    }
+    for (const d of ticks(0, maxD, 6)) g.appendChild(el('text', { x: sx(d), y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, `${Math.round(d)}d`));
+    g.appendChild(el('line', { x1: box.left, x2: box.right, y1: box.bottom, y2: box.bottom, class: 'axis' }));
+    svg.appendChild(g);
+    const line = (sig: number, cls: Record<string, string>) => {
+      const pts: [number, number][] = [];
+      for (let d = 0; d <= maxD; d += maxD / 80) pts.push([sx(d), sy(0.7979 * sig * Math.sqrt(d / 365))]);
+      svg.appendChild(el('path', { d: path(pts), fill: 'none', ...cls }));
+    };
+    line(sigL, { stroke: 'var(--c2)', 'stroke-width': '1.5', 'stroke-dasharray': '6 4' });
+    line(cfg.vol1y, { stroke: 'var(--muted)', 'stroke-width': '1.5', 'stroke-dasharray': '2 4' });
+    const pts: [number, number][] = cfg.options.map((o) => [sx(o.days), sy(o.impliedMove)]);
+    svg.appendChild(el('path', { d: path(pts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2 }));
+    for (const o of cfg.options) {
+      const ev = o.expiration === cfg.eventExp;
+      svg.appendChild(el('circle', { cx: sx(o.days), cy: sy(o.impliedMove), r: ev ? 5 : 3.5, fill: ev ? 'var(--gold)' : 'var(--c1)', stroke: 'var(--bg-elev)', 'stroke-width': 1.5 }));
+      if (ev) svg.appendChild(el('text', { x: sx(o.days) + 8, y: sy(o.impliedMove) - 8, class: 'lbl' }, `${o.expiration}: ${fmt.pct(o.impliedMove, 1)} (first post-report expiry)`));
+    }
+    svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 214, class: 'lbl muted', 'text-anchor': 'middle' }, 'Days to expiry'));
+  }
+
+  function drawPnl(svg: SVGSVGElement, o: OE, spot: number, side: number, mv: number, n: number) {
+    clear(svg);
+    const box = { left: 60, right: 700, top: 14, bottom: 175 };
+    const cost = o.straddle * 100 * n;
+    const pnlAt = (m: number) => side * (Math.abs(spot * (1 + m) - o.strike) - o.straddle) * 100 * n;
+    const range = Math.max(0.4, Math.abs(mv) + 0.05);
+    const ys: number[] = [];
+    for (let m = -range; m <= range; m += 0.01) ys.push(pnlAt(m));
+    const lo = Math.min(...ys, -cost * 0.1), hi = Math.max(...ys, cost * 0.1);
+    const sx = scale(-range, range, box.left, box.right), sy = scale(lo, hi, box.bottom, box.top);
+    const g = el('g');
+    for (const v of ticks(lo, hi, 5)) {
+      g.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(v), y2: sy(v), class: 'grid' }));
+      g.appendChild(el('text', { x: box.left - 6, y: sy(v) + 4, class: 'tick', 'text-anchor': 'end' }, fmt.usd(v, 0)));
+    }
+    for (const m of ticks(-range, range, 8)) g.appendChild(el('text', { x: sx(m), y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, fmt.pct(m, 0)));
+    g.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(0), y2: sy(0), class: 'axis' }));
+    svg.appendChild(g);
+    const pts: [number, number][] = [];
+    for (let m = -range; m <= range; m += 0.005) pts.push([sx(m), sy(pnlAt(m))]);
+    svg.appendChild(el('path', { d: path(pts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2 }));
+    svg.appendChild(el('line', { x1: sx(mv), x2: sx(mv), y1: box.top, y2: box.bottom, stroke: 'var(--gold)', 'stroke-dasharray': '4 3' }));
+    svg.appendChild(el('circle', { cx: sx(mv), cy: sy(pnlAt(mv)), r: 5, fill: 'var(--gold)', stroke: 'var(--bg-elev)', 'stroke-width': 1.5 }));
+    svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 208, class: 'lbl muted', 'text-anchor': 'middle' }, 'Underlying move at expiry'));
+  }
+
+  function init(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.querySelector('script[data-cfg]')!.textContent!);
+    const q = (k: string) => root.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    drawTerm(root.querySelector<SVGSVGElement>('svg.term')!, cfg);
+    const update = () => {
+      const exp = cfg.options.find((x) => x.expiration === q('exp').value) ?? cfg.options[0];
+      const side = +q('side').value, mv = +q('mv').value, n = +q('n').value;
+      o('mv').textContent = `${mv >= 0 ? '+' : '−'}${fmt.pct(Math.abs(mv), 1)}`;
+      o('n').textContent = String(n);
+      const cost = exp.straddle * 100 * n;
+      out('cost').textContent = `${fmt.usd(exp.straddle, 2)} per share · ${fmt.usd(cost, 0)} total · ${fmt.pct(exp.impliedMove, 1)}`;
+      const beUp = exp.strike + exp.straddle, beDn = exp.strike - exp.straddle;
+      out('be').textContent = `${fmt.usd(beDn, 2)} and ${fmt.usd(beUp, 2)} (${fmt.pct(beDn / cfg.spot - 1, 1)} / +${fmt.pct(beUp / cfg.spot - 1, 1)})`;
+      const pnl = side * (Math.abs(cfg.spot * (1 + mv) - exp.strike) - exp.straddle) * 100 * n;
+      const pe = out('pnl');
+      pe.textContent = `${pnl >= 0 ? '+' : '−'}${fmt.usd(Math.abs(pnl), 0)}`;
+      pe.className = 'v ' + (pnl >= 0 ? 'pos' : 'neg');
+      out('pnlk').textContent = `${side > 0 ? 'max loss' : 'max gain'} ${fmt.usd(cost, 0)} if the stock expires at the strike`;
+      const beMove = exp.straddle / cfg.spot;
+      const past = cfg.moves.filter((m) => m.date < cfg.reportDate);
+      const beyond = past.filter((m) => Math.abs(m.move) > beMove).length;
+      out('hit').textContent = past.length ? `${beyond} of ${past.length} (${fmt.pct(beyond / past.length, 0)}) moved more than ${fmt.pct(beMove, 1)}` : 'n/a';
+      drawPnl(root.querySelector<SVGSVGElement>('svg.pnl')!, exp, cfg.spot, side, mv, n);
+    };
+    ['exp', 'side', 'mv', 'n'].forEach((k) => q(k).addEventListener('input', update));
+    update();
+  }
+  document.querySelectorAll<HTMLElement>('[data-model="straddle"]').forEach(init);
+</script>

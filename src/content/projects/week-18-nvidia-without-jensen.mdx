@@ -1,0 +1,260 @@
+---
+title: "Nvidia Without Jensen: Pricing Key-Person Risk, a Founder's Return, and the Grey Market"
+date: 2026-11-20
+week: 18
+tags: [Firms, Game Theory, Markets, CFA]
+summary: "Jensen Huang resigned on November 11 after a foreign-intelligence investigation and two reported affairs, and by the weekend his allies were lobbying for his return while the Treasury Secretary demanded an outsider. The option chain says what the market charges for not knowing who runs the company; an event study says what it has already charged; a decision tree says when a board should bring a founder back; and an inspection game explains why Nvidia chips keep turning up in China, which is where this story started."
+takeaways:
+  - "Key-person risk is a line item you can read off the option chain. The at-the-money straddle through the November 17 report prices an earnings move well above Nvidia's historical average, and long-dated implied vol sits above realized vol by a margin that is not about one quarter's numbers."
+  - "The founder-return evidence is against the crowd. Boomerang CEOs in the S&P 1500 trailed their first-stint peers by about ten percentage points a year, founders did worse than non-founders, and the gap was widest in fast-changing industries. Jobs is the exception people remember because it is an exception."
+  - "The board's decision is a tree with two chance nodes: what the investigation finds, and whether an outside candidate accepts. Reinstatement is only the equilibrium move if the investigation clears Huang and the recaptured premium is large; the political cost of defying the Treasury is paid in every branch."
+  - "The grey market is an inspection game, not a leak. At an 80 to 180 percent premium in China and a single-digit interception rate, shipping is rational; the break-even enforcement rate is far above anything the cases to date suggest, which is why the premium persists and why compliance is now a succession issue."
+sources:
+  - title: "SEC EDGAR: Nvidia Form 8-K, CEO resignation and interim appointments (filed November 12, 2026)"
+    url: https://www.sec.gov/Archives/edgar/data/0001045810/000104581026000082/nvda-20261111.htm
+  - title: "Nvidia newsroom: NVIDIA Announces CEO Transition (November 12, 2026)"
+    url: https://nvidianews.nvidia.com/news/nvidia-announces-ceo-transition
+  - title: "Nvidia newsroom: Statement from the independent members of the board (November 10, 2026)"
+    url: https://nvidianews.nvidia.com/news/statement-from-the-independent-members-of-the-nvidia-board
+  - title: "CNBC live blog: Nvidia CEO Jensen Huang resigns (November 12, 2026)"
+    url: https://www.cnbc.com/2026/11/12/nvidia-jensen-huang-ceo-live-updates.html
+  - title: "CNBC: Nvidia board selecting search firm, Haas speculation 'premature' (November 13, 2026)"
+    url: https://www.cnbc.com/2026/11/13/nvidia-huang-ceo-replacement-search.html
+  - title: "Reuters via Yahoo Finance: Huang discusses comeback with confidants, FT reports (November 15, 2026)"
+    url: https://finance.yahoo.com/markets/stocks/articles/jensen-huang-discusses-comeback-nvidia-192628314.html
+  - title: "Fox Business: Huang weighs comeback as ally plans 'war room' (November 15, 2026)"
+    url: https://www.foxbusiness.com/technology/jensen-huang-weighs-nvidia-ceo-comeback-ally-plans-war-room-report
+  - title: "IBTimes: Bessent calls for an outside hire and a 'dramatic shakeup' (November 16, 2026)"
+    url: https://www.ibtimes.com.au/jensen-huang-nvidia-ceo-return-leadership-crisis-1878640
+  - title: "SEC EDGAR: Nvidia DEF 14A proxy statement (May 12, 2026): share count, ownership, board, no severance agreements"
+    url: https://www.sec.gov/Archives/edgar/data/0001045810/000104581026000036/nvda-20260512.htm
+  - title: "SEC EDGAR: Nvidia Form 10-K for fiscal 2026: key-person risk factor, H200 licensing"
+    url: https://www.sec.gov/Archives/edgar/data/1045810/000104581026000021/nvda-20250125.htm
+  - title: "MIT Sloan Management Review: Boomerang CEOs: What Happens When the CEO Comes Back? (September 2020)"
+    url: https://sloanreview.mit.edu/article/boomerang-ceos-what-happens-when-the-ceo-comes-back/
+  - title: "Fortune: The outside contenders to succeed Jensen Huang (November 12, 2026)"
+    url: https://fortune.com/2026/11/12/nvidia-next-ceo-the-outside-contenders-to-succeed-jensen-huang/
+  - title: "Reuters via The Spokesman-Review: Nvidia approaches Arm CEO Haas (November 13, 2026)"
+    url: https://www.spokesman.com/stories/2026/nov/13/nvidia-approaches-arm-ceo-haas-as-employees-seek-h/
+  - title: "Arm Holdings FY2026 results summary (May 2026)"
+    url: https://mlq.ai/news/arm-holdings-unveils-record-breaking-q4-and-full-year-2026-financial-results/
+  - title: "Fortune: Sonnenfeld and Tian on Caremark exposure for Nvidia's board (November 11, 2026)"
+    url: https://fortune.com/2026/11/11/nvidia-board-jensen-huang-caremark-shareholder-lawsuits-delaware/
+  - title: "Yahoo Finance: Josh Brown on the 'Jensen premium' and the forward multiple (November 13, 2026)"
+    url: https://finance.yahoo.com/markets/stocks/articles/josh-brown-nvidia-no-jensen-173128136.html
+  - title: "SEC EDGAR: Nvidia Q2 FY2027 results and Q3 outlook (August 26, 2026)"
+    url: https://www.sec.gov/Archives/edgar/data/0001045810/000104581026000073/q2fy27pr.htm
+  - title: "EarningsWatcher: NVDA implied vs realized earnings moves (accessed November 16, 2026)"
+    url: https://earnings-watcher.com/wiki/nvda-earnings-november-2026
+  - title: "CNBC: At least $1 billion of Nvidia chips smuggled into China after the April curbs, FT reports (July 24, 2025)"
+    url: https://www.cnbc.com/2025/07/24/nvidia-ai-chips-smuggling-china-trump.html
+  - title: "DOJ: 'Operation Gatekeeper' shuts down China-linked AI chip smuggling network (December 8, 2025)"
+    url: https://www.justice.gov/opa/pr/us-authorities-shut-down-major-china-linked-ai-tech-smuggling-network
+  - title: "DOJ: California man arrested for smuggling over $300 million of export-controlled servers to China (October 1, 2026)"
+    url: https://www.justice.gov/opa/pr/california-man-arrested-smuggling-more-300-million-export-controlled-computer-servers-china
+  - title: "CNBC: Super Micro co-founder charged over servers routed to China (March 19, 2026)"
+    url: https://www.cnbc.com/2026/03/19/us-tech-execs-smuggled-nvidia-chips-to-china-prosecutors-say.html
+  - title: "CNBC: Singapore charges and the Megaspeed probe (November 13, 2026)"
+    url: https://www.cnbc.com/2026/11/13/nvidia-jensen-huang-alice-spy-megaspeed-.html
+  - title: "Reuters via WHBL: Nvidia B300 server at $1 million in China on US curbs (April 30, 2026)"
+    url: https://whbl.com/2026/04/30/exclusive-prices-of-nvidias-b300-server-at-1-million-in-china-on-us-curbs-sources-say/
+  - title: "Reuters via AJOT: Nvidia H200 chips pile up in Hong Kong as China withholds approval (November 5, 2026)"
+    url: https://www.ajot.com/news/exclusive-nvidia-chips-pile-up-in-hong-kong-as-china-withholds-import-approval
+  - title: "Baker McKenzie: BIS revises license review policy for AI chips to China (January 28, 2026)"
+    url: https://sanctionsnews.bakermckenzie.com/bis-revises-license-review-policy-for-advanced-computing-commodities-ai-semiconductors-to-china-and-macau-when-exported-from-the-united-states/
+  - title: "CNBC: Nvidia and AMD to pay 15% of China chip revenue to the US government (August 10, 2025)"
+    url: https://www.cnbc.com/2025/08/10/nvidia-amd-15percent-of-china-chip-sales-revenues-to-us-ft-reports.html
+  - title: "Engadget on the Bloomberg investigation: Nvidia's smuggling problem is getting worse (October 2, 2026)"
+    url: https://engadget.com/2275633/nvidias-smuggling-problem-is-getting-worse
+  - title: "Epoch AI: Huawei's roadmap to 2031 (September 4, 2026)"
+    url: https://epoch.ai/publications/huaweis-roadmap-to-2031
+  - title: "eWeek: China bars foreign AI chips from state-funded data centers (November 6, 2025)"
+    url: https://www.eweek.com/news/china-blocks-foreign-ai-chips/
+---
+import EarningsStraddle from '../../components/models/EarningsStraddle.astro';
+import EventStudy from '../../components/models/EventStudy.astro';
+import GameTree from '../../components/models/GameTree.astro';
+import GreyMarket from '../../components/models/GreyMarket.astro';
+import { nvidia, earningsMoves, nvidiaEventStudy, realizedVol, companies, companySnapshot, shortDate } from '../../lib/data';
+
+export const spot = nvidia.spot;
+export const asOf = nvidia.asOf;
+export const moves = earningsMoves();
+export const pastMoves = moves.filter((m) => m.date < '2026-11-17');
+export const meanAbs = pastMoves.reduce((a, m) => a + Math.abs(m.move), 0) / Math.max(1, pastMoves.length);
+export const lastMove = moves[moves.length - 1];
+export const reported = lastMove && lastMove.date === '2026-11-17';
+export const eventExp = nvidia.options.find((o) => o.expiration > '2026-11-17') ?? nvidia.options[0];
+export const longExp = nvidia.options.reduce((b, o) => (Math.abs(o.days - 90) < Math.abs(b.days - 90) ? o : b), nvidia.options[0]);
+export const ivLong = (longExp.call.iv + longExp.put.iv) / 2;
+export const vol1y = realizedVol(nvidia.close, 252);
+export const study = nvidiaEventStudy('2026-11-11');
+export const lastRow = study.rows[study.rows.length - 1];
+export const car = Math.exp(lastRow.car) - 1;
+export const nvda = companySnapshot(companies.get('NVDA'));
+export const preClose = nvidia.close[Math.max(0, nvidia.dates.findIndex((d) => d >= '2026-11-11') - 1)];
+export const carUsd = car * preClose * nvda.shares;
+export const peak = 239.24;
+export const fromPeak = spot / peak - 1;
+export const pct = (x, d = 1) => `${x >= 0 ? '+' : '−'}${(100 * Math.abs(x)).toFixed(d)}%`;
+export const upct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
+
+{/* Board decision tree. Payoffs are percent of pre-event market value: the only data-anchored entry is the
+    current abnormal discount `d`; the rest are the two camps' stated views, exposed as scenarios. */}
+export const d = +(100 * Math.abs(car)).toFixed(1);
+export const boardTree = (p, q, J, E, pol, crisis) => ({
+  player: 'Board',
+  actions: [
+    { label: 'Reinstate Huang', node: { player: 'Nature', actions: [
+      { label: 'Investigation clears him', prob: p, node: { payoffs: [+(J - pol).toFixed(1)] } },
+      { label: 'Investigation finds more', prob: +(1 - p).toFixed(2), node: { payoffs: [+(-crisis - pol).toFixed(1)] } } ] } },
+    { label: 'Internal successor (Kress or Buck)', node: { player: 'Nature', actions: [
+      { label: 'Investigation clears him', prob: p, node: { payoffs: [+(-d + 0.5).toFixed(1)] } },
+      { label: 'Investigation finds more', prob: +(1 - p).toFixed(2), node: { payoffs: [+(-d).toFixed(1)] } } ] } },
+    { label: 'External technologist (Haas-type)', node: { player: 'Nature', actions: [
+      { label: 'Candidate accepts', prob: q, node: { payoffs: [+E.toFixed(1)] } },
+      { label: 'Candidate declines, search drags', prob: +(1 - q).toFixed(2), node: { payoffs: [+(-d - 1).toFixed(1)] } } ] } },
+  ],
+});
+export const scenarios = [
+  { name: 'Ives view: 25% Jensen premium, probe clears (p = 0.7)', tree: boardTree(0.7, 0.6, 25 * 0.5, 3, 4, 10) },
+  { name: 'Brown view: no premium, probe clears (p = 0.7)', tree: boardTree(0.7, 0.6, d, 3, 4, 10) },
+  { name: 'Ives view, probe finds more (p = 0.3)', tree: boardTree(0.3, 0.6, 25 * 0.5, 3, 4, 10) },
+];
+
+## The setup
+
+Nvidia's board accepted Jensen Huang's resignation as president, chief executive and director on November 11, 2026, "effective immediately," and disclosed it in an 8-K the next morning. Colette Kress, the chief financial officer since 2013, became interim CEO while keeping the CFO job. Harvey Jones, a director since 1993, became the company's first chair; before that the board had no chair at all. The press release gave no reason and did not quote Huang.
+
+The reason was a month in the making. From October 29 the New York Times reported that US officials believed Huang had a close relationship with Alice Huang, no relation, a Singapore-based executive at a company called Megaspeed whom they suspected of being a Chinese intelligence asset. On November 8 Huang sent an internal memo admitting he had been unfaithful to his wife; the same day the board announced an independent investigation into whether he had been "the target of a foreign intelligence effort," adding that it had no reason to believe company secrets were compromised and that it had confidence in him. On November 10 the independent directors retained the former acting US Attorney Joon Kim and Wachtell Lipton. On November 11 the Times reported a second relationship, with a vice president who reported to him, and the board met that night.
+
+The stock opened down more than 13 percent on November 12, touched a 52-week low of \$148.80, and closed down 4.3 percent at \$166.19 as retail buyers absorbed the open. It had already fallen a quarter from its October 6 record close of \$239.24 before the memo. At \${spot.toFixed(2)} on {shortDate(asOf)} it is {pct(fromPeak)} from that peak.
+
+Then the story turned. On November 13 the Financial Times reported the board had approached Arm's chief executive Rene Haas; the board replied that it had not formally engaged any candidate and was still choosing a search firm. The same day Brad Gerstner of Altimeter and Gavin Baker of Atreides, who together held about 10.6 million shares at midyear, wrote to the board asking that "all options" stay open "including the potential return of Jensen Huang." A petition at standwithjensen.com passed 150,000 signatures by the weekend, Elon Musk said he had signed it, and on Sunday November 15 the FT reported that Huang was discussing a comeback with confidants while an ally assembled a "war room" to lobby the board and the White House. The same morning Treasury Secretary Scott Bessent said on television that the board needed "a dramatic shakeup," should look outside the company, and had ten days to answer his questions on export-control compliance.
+
+That is the whole problem in one weekend: a founder who may want back, shareholders and employees who want him back, a Treasury that wants him gone, an open investigation, a report on November 17, and a chip-diversion scandal that connects all of it. Each piece is priceable.
+
+## What the market pays for not knowing
+
+Options on a stock with a scheduled event price two things at once: the ordinary diffusion of the share price and the jump on the event. An at-the-money straddle, a call and a put at the same strike, costs roughly 0.8 times the standard deviation of the move the market expects by expiry, so straddle cost divided by spot is the market's implied move. The straddle expiring just after the November 17 report contains the earnings jump plus a couple of days of ordinary noise; the straddles expiring months out contain no particular event and so measure the general uncertainty premium.
+
+<EarningsStraddle id="straddle" />
+
+The decomposition is the point. The first panel strips the ordinary diffusion, measured by the roughly 90-day implied vol of {upct(ivLong, 0)}, out of the {upct(eventExp.impliedMove)} straddle expiring {shortDate(eventExp.expiration)} and leaves an implied one-day earnings move that the market is paying for. Against the {upct(meanAbs)} average absolute move after the last {pastMoves.length} reports in the table, the excess is the event premium: the price of the first print without Huang on the call, the first guidance from an interim CEO, and the first quarter in which the China line is contested by the Treasury.
+
+The second, quieter number matters more. Long-dated implied vol of {upct(ivLong, 0)} against one-year realized vol of {upct(vol1y, 0)} is a premium that extends across every expiry on the chain, not just the one after the report. That is what key-person risk looks like in prices: not a single jump but a higher variance on every future date until the market learns who runs the company. If a permanent CEO were named tomorrow, the front straddle would barely change and the long-dated vol would fall.
+
+Independent snapshots agree on the magnitudes. EarningsWatcher put the implied move at ±9.2 percent on November 14 against a ten-year average realized earnings-day move of ±7.8 percent and a median of ±6.5 percent, and noted that the realized move exceeded the implied in only 5 of the last 17 reports. An analysis on November 12 stripped out ordinary-day variance and put the report-day move the market was paying for at 6.2 to 6.9 percent, about 1.4 times the average of the last seven prints, and observed that the ordinary-day vol itself, more than the report, was why the straddle was so expensive. The chart above is the same calculation on the day's quotes, and it refreshes daily, so if you are reading after the report the table already shows what the stock did.
+
+{reported && (<p>The report is in. The next-session move after November 17 was {pct(lastMove.move)}, against an implied one-day move that the chain had priced at roughly {upct(0.7979 * Math.sqrt(Math.max(0, (eventExp.impliedMove / 0.7979) ** 2 - ivLong * ivLong * Math.max(0, eventExp.days - 1) / 365)))} on the snapshot before the print. Whether the straddle buyer or the seller won that trade is now in the table; whether the long-dated premium compresses is the question for the next month.</p>)}
+
+## What the market has already charged
+
+An event study separates what Nvidia did from what semiconductors did. Regress NVDA's daily returns on the SMH chip ETF over the year before the news, stop the window a few days early so the estimation is clean, and from the event date on treat the residual as the abnormal return. The running sum is the cumulative abnormal return, the market's running verdict on the company-specific news net of everything else that hit chips that week, which was a lot: the Nasdaq entered a correction on November 5 and 6 on data-center fears, and Nvidia fell 9.3 percent on November 5 before anyone had heard of Megaspeed.
+
+<EventStudy id="event" />
+
+From the close before November 11 to {shortDate(lastRow.date)} the abnormal return is {pct(car)}, which on the pre-event market capitalization is about {carUsd >= 0 ? '+' : '−'}\${(Math.abs(carUsd) / 1e9).toFixed(0)} billion of value attributable to the succession news specifically, as distinct from the sector. The raw decline is larger because the sector fell too, and the band on the chart shows how much of the CAR could be noise given the stock's residual volatility; the panel reports the t-statistic. Change the event date to November 12, when the 8-K hit, or shorten the estimation window, and watch how stable the conclusion is. That stability is the test an event study has to pass before anyone quotes it.
+
+Two readings of the same number were on offer that week. Dan Ives had a \$300 target with Huang and \$225 without him, a 25 percent "Jensen premium," and said on air that Huang had been "worth a trillion dollars" to the valuation. Josh Brown's reply was that there is no Jensen premium because there was never a premium to take away: at \$166 the stock traded on about 14 times forward earnings against 47 times in June 2024, a three-year average near 30, and the S&P 500's 17.7. Both can be right. A low multiple is consistent with a market that had already discounted something about the China line, the customer concentration, or the cycle; the event study measures the increment, not the level. The six downgrades and the target cuts (Cantor \$350 to \$250, Citi \$285 to \$225) are the sell side marking the increment; Bloomberg Intelligence noting that fiscal 2027 and 2028 estimates were "largely unchanged" is the sell side saying the increment is a discount rate, not a cash flow. In CFA terms, key-person risk is a company-specific risk premium added to the required return, and the event study is how you measure what the market added.
+
+## Reinstating him, or not: the facets
+
+**Who wants what.** The coalition for a return is unusually explicit. The Gerstner and Baker letter, the petition's 5,248 self-identified current employees and 53,233 self-identified shareholders at the 100,000 mark, an internal suggestion-box post with more than 1,600 comments, Musk, Tim Sweeney, Travis Kalanick, and a reported phone call from the President on November 10 urging Huang to fight. The coalition against is smaller and holds the levers: the Treasury Secretary, three House committees and Senate Banking seeking testimony from Huang and the Commerce Secretary, Senators Wyden and Scott, and a board that has said twice that no process has begun and that its first priority is "U.S. national and economic security." Bernstein's Stacy Rasgon summarized the market's prior in six words: "Jensen is Nvidia. Nvidia is Jensen." Melius said it had expected him to stay ten more years and that there is "no clear successor."
+
+**The mechanics.** Nvidia has one class of stock, one vote per share, 24.2 billion shares outstanding, and no dual-class founder control. Huang's trusts held 870.6 million shares, 3.58 percent, at the proxy date, against BlackRock's 7.43 percent and Vanguard's 7.31 percent. He cannot vote himself back. He has left the board, so a return requires the remaining independent directors, now chaired by Jones, to appoint him CEO and re-nominate him as a director, on top of whatever the Wachtell investigation finds. The company has no employment or severance agreements with named executives, so there is no contract to unwind in either direction, and it has had a clawback policy since 2009. The Yale governance scholars Sonnenfeld and Tian argued on November 11 that the directors already face potential Caremark oversight claims in Delaware for the Megaspeed red flags, noting that the trade-compliance committee met three times last fiscal year, that no director has a national-security background, and that there is no chief compliance officer. A board with that exposure reinstating the executive at the center of the investigation, over the objection of the Treasury, before the investigation reports, is taking on a second lawsuit to settle the first.
+
+**What the evidence says about founder returns.** The memorable precedent is Jobs, who returned to Apple in 1997 and built the most valuable company in the world. The data say he is the exception. Bingham, Hendricks, Howell and Kolev studied 167 "boomerang" CEOs at S&P 1500 firms between 1992 and 2017 against more than 6,000 others and found the boomerang-led companies averaged annual stock performance 10.1 percentage points lower than first-stint counterparts, a gap that held against non-boomerang CEOs hired in crises. Founders were 4 percent of all CEOs but 44 percent of boomerangs, and founders did worse than non-founders. The gap was widest in "dynamic, fast-changing industries," which is a description of accelerators on a one-year product cadence. Their explanations are the ones that apply here: the conditions that made the first tenure work have changed, returning founders are reluctant to revise the vision, and a return signals that succession planning failed. Schultz's 2008 return tripled Starbucks; Michael Dell's 2007 return saw the stock fall 43 percent before he took the company private. The base rate is the base rate.
+
+**The tree.** Put the board's choice into a decision tree with the two chance nodes that matter and payoffs in percent of the pre-event market value. The only entry anchored in data is the current abnormal discount, {d.toFixed(1)}%, from the event study above; the rest are the two camps' positions made explicit. Reinstatement recaptures some share of the "Jensen premium" if the investigation clears him (the Ives scenario assumes half of 25 percent; the Brown scenario assumes it recaptures only the measured discount, because there was no premium) and costs a political penalty in either branch, since the Treasury's objection does not go away when the probe does. If the investigation finds more, reinstatement turns into a second removal and a governance crisis. An internal successor holds the discount and adds a little if the probe clears the company's conduct. An external technologist earns a modest re-rating if he accepts and a prolonged-search penalty if he declines, which Arm's 5 percent drop on the Haas report suggests is a real possibility.
+
+<GameTree
+  id="board"
+  players={['Board']}
+  scenarios={scenarios}
+  note="Payoff: percent of pre-event market value to shareholders, net of governance cost. Probabilities are assumptions named in the scenario; the discount is the live abnormal return. Click a scenario to re-solve."
+/>
+
+Read the rollback values rather than the leaves. In the Ives world with a probe that clears him, reinstatement wins because the recaptured premium swamps the political cost. In the Brown world, with the same probabilities, the external candidate wins because there is no premium to recapture and the reinstatement branch is all cost. Lower the probability that the probe clears him and reinstatement loses in both worlds. The decision is not about loyalty or about whether Huang is irreplaceable; it is about the product of a probability the board will know in weeks and a premium the market has been arguing about for days, and the tree says the board should wait for the probability before it decides anything, which is what its two statements have said it is doing.
+
+## The candidates and their records
+
+**Colette Kress**, 59, interim. CFO since September 2013 after Cisco, thirteen years at Microsoft including four as CFO of Server and Tools, and Texas Instruments. Revenue went from \$4.1 billion to \$215.9 billion on her watch, and she has run the capital allocation, the buyback, and the earnings calls through the entire AI cycle. The market's read, from Dan Ives to the executive recruiters, is the same: the right interim, probably not the permanent choice, because she is not a technologist and the company's product cadence is the strategy. One suggestion in circulation is a co-CEO pairing of Kress with a product leader.
+
+**Rene Haas**, Arm's chief executive since February 2022, is the external name the board was reported to have approached. He spent seven years at Nvidia to 2013, running the computing products business, then joined Arm, took it public in September 2023 at \$51 a share and a \$54.5 billion valuation, and has delivered three straight years of revenue growth above 20 percent, with fiscal 2026 revenue of \$4.92 billion. Arm's remuneration committee proposed a one-time award worth up to about \$800 million that vests only if Arm's market value reaches \$1 trillion, \$1.5 trillion and \$2 trillion by 2029 to 2031, which both proxy advisers opposed; the point is that he already has a founder-scale incentive where he is. The case for him is that he would not need to be brought up to speed on Nvidia's culture and that Nvidia's Grace and Vera CPUs are Arm-based. The case against, made by Fortune, is that his Nvidia years predate NVLink, Mellanox, and rack-scale systems, which is the business now.
+
+**Ian Buck**, the internal technologist. Hired from Stanford in 2004, where his Brook language became the basis of CUDA, which he built with John Nickolls and which shipped in 2007. CUDA is the moat; Buck led the software platform that keeps developers on Nvidia's chips, and he leads the hyperscale and HPC business. He led the prediction markets' next-CEO contracts in the first week and is the name analysts call "the most logical permanent pick." **Bill Dally**, chief scientist since 2009, former Stanford computer science chair, is the other internal technologist named, and **Michael Kagan**, the CTO who came with Mellanox, is the networking answer to the rack-scale question. Dwight Diercks in software engineering and Bryan Catanzaro in applied research round out the internal list in press reports.
+
+**Outsiders.** Lisa Su of AMD, named by several commentators and, as it happens, a distant cousin of Huang; the obstacle is poaching a sitting rival's CEO in the middle of a product war. Tim Cook, floated by the President on Truth Social the morning of the resignation and listed by Ives with Thomas Kurian of Google Cloud and Nikesh Arora of Palo Alto Networks as the top three external candidates. Johny Srouji, Apple's hardware chief, per Semafor. Sanjay Mehrotra of Micron and Matt Murphy of Marvell, per industry watchers.
+
+The choice is a signal, and the board knows the market will decode it. An external technologist says the strategy needs a second opinion; an internal technologist says the strategy is the asset and the founder was its servant; a financial executive says the company is now a franchise to be run rather than a bet to be made; a reinstatement says the board was wrong on November 11. In a signaling game the receiver updates on the choice, not on the press release, which is why "the board has full confidence in Colette" moved nothing and the FT's Haas report moved Arm.
+
+## Why it matters
+
+Huang founded the company in 1993 and ran it top down for thirty-three years. He had as many as 60 direct reports in 2025 and 33 the week of the resignation, a span no successor will keep, which means the organization chart itself changes with the CEO. He set the one-year product cadence in June 2024, replacing a two-year cycle, and the Vera Rubin generation that is now in full production was unveiled less than three months after Blackwell. He gave the GTC keynote that carried the roadmap and the trillion-dollar data-center forecast. He managed the relationships with governments and AI labs personally, which is the part that made him the most exposed executive in the industry when the government became a customer and a regulator at once.
+
+Nvidia's own 10-K says the quiet part. The risk factor on executives reads: "we are highly dependent on the services of our longstanding executive team. Failure to ensure effective succession planning, transfer of knowledge, and smooth transitions involving executives and key employees could hinder our strategic planning, execution, and long-term success." Huang is not named individually, and the executive officers listed in February were five people, three of them over 59. KeyBanc called the departure "a material increase in strategic, organizational, and execution risk that warrants a higher risk premium and lower valuation multiple." That sentence is a valuation statement, and the straddle and the event study are the two instruments that measure it.
+
+## The grey market: where this started
+
+The relationship that ended Huang's tenure ran through a company accused of moving Nvidia chips into China, and the Treasury's ten-day clock is about chip exports, not conduct. The grey market is therefore not a side story. It is the mechanism by which Nvidia's China exposure became a governance problem, and it has its own game.
+
+**The rules.** The United States has tightened controls on advanced accelerators in October 2022, October 2023 (adding a performance-density test and extending licensing to 22 embargoed countries, which created the H20 as a compliant part), December 2024 (HBM and 140 entity listings), and January 2025 (the diffusion rule, rescinded in May 2025). In April 2025 the H20 was made licensable "for the indefinite future"; Nvidia took a \$4.5 billion charge and lost \$8 billion of expected quarterly revenue. In August 2025 Nvidia and AMD agreed to pay the US government 15 percent of China revenue from the H20 and MI308 in exchange for licenses. In December 2025 the President allowed H200 sales to approved Chinese customers with a 25 percent fee, and a BIS rule effective January 15, 2026 moved H200-class exports from presumption of denial to case-by-case review with conditions: no more than half the compute shipped to US customers, independent lab testing of each shipment, and end-use certification; Blackwell remains barred. Then Beijing withheld import approvals. By November 2026 about 600,000 H200s sat in Hong Kong warehouses, Nvidia's China data-center revenue was under 1 percent of the segment, the company took a \$400 million charge on unsold H200 inventory, and its third-quarter outlook assumed zero China data-center compute revenue.
+
+**The cases.** The Financial Times reported in July 2025 that at least \$1 billion of Nvidia chips entered China in the three months after the April restrictions, with distributors selling B200s openly from May. Prosecutors in Singapore charged three men in March 2025 over \$390 million of servers whose stated destination was false, and a fifth person received 41 charges on November 13, 2026; Singapore has barred Alice Huang from re-entry and complained publicly that it received "limited information or assistance" from the US. The Justice Department's cases run from a California pair accused of 21 unlicensed H100 shipments (August 2025), to a Florida ring that moved 400 A100s and tried to move H200s (November 2025), to "Operation Gatekeeper," at least \$160 million of H100s and H200s with more than \$50 million seized (December 2025), to a Super Micro co-founder charged in March 2026 over a scheme prosecutors tied to roughly \$2.5 billion of server sales including \$510 million routed through Southeast Asia in a few weeks of 2025, to a Californian indicted in September 2026 over more than \$300 million of servers that went to Malaysia and Singapore and then to China. Bloomberg's October 2026 investigation found Thailand and Singapore receiving more accelerators than they could physically use, a Bangkok customer claiming 100 megawatts of data-center capacity in a country with a few hundred megawatts in total, and serial stickers peeled with a hair dryer. Megaspeed itself went from \$33 million of assets in 2023 to about \$3 billion in 2024; its Malaysian affiliate bought at least \$4.8 billion of AI equipment between mid-2024 and early 2026 by trade records, and Nvidia's ban on sales to it in June 2025 did not stop 17,544 GB300 systems, about \$787 million, landing in Malaysia that November.
+
+**The prices.** This is a market, so it has prices, and they are the evidence. Reuters reported a B300 server at about 7 million yuan, roughly \$1 million, in China in April 2026 against about \$550,000 in the United States, an 85 percent premium, with rentals at 190,000 yuan a month; by November an eight-card H200 server was offered above 6 million yuan, three times the year-earlier price, and Blackwell servers above 20 million yuan. A premium that large on a product that is legally unobtainable is the return on smuggling, and the cases above are the cost. The model below treats it as what it is.
+
+<GreyMarket
+  id="grey"
+  usPrice={550000}
+  premium={1.82}
+  cost={0.15}
+  detect={0.08}
+  penalty={1.5}
+  reportedFlow={1e9}
+  demand={9e9}
+  enforceCost={200e6}
+  enforceValue={3e9}
+  note="Reference unit: an eight-GPU B300 server at about $550,000 in the US and about 7 million yuan (about $1 million) in China per Reuters, April 2026, a 1.82× premium. Reported leakage: at least $1 billion in the three months after April 2025 (FT). Addressable demand of $9 billion a quarter is derived from IDC's 678,000 Nvidia accelerators shipped in China in the first half of 2026 at about $27,000 a chip. Smuggling cost, detection probability, penalty and the enforcer's figures are assumptions; move them."
+  sources={[
+    { name: 'Reuters via WHBL: B300 server prices in China vs US', asOf: '2026-04-30', url: 'https://whbl.com/2026/04/30/exclusive-prices-of-nvidias-b300-server-at-1-million-in-china-on-us-curbs-sources-say/' },
+    { name: 'CNBC on the FT report: at least $1B of chips smuggled in three months', asOf: '2025-07-24', url: 'https://www.cnbc.com/2025/07/24/nvidia-ai-chips-smuggling-china-trump.html' },
+    { name: 'IDC H1 2026 China accelerator shipments (via BigGo Finance)', asOf: '2026-10-14', url: 'https://finance.biggo.com/news/1156d043-8753-41ec-9a86-a28fd9ed14c2' },
+    { name: 'DOJ: Operation Gatekeeper, $160M exported, over $50M seized', asOf: '2025-12-08', url: 'https://www.justice.gov/opa/pr/us-authorities-shut-down-major-china-linked-ai-tech-smuggling-network' },
+  ]}
+  dataNote="The premium, reported flow and demand are from the cited reporting. The 15% smuggling cost, 8% per-shipment detection probability, 1.5× loss if caught, and the enforcer's cost and valuation are stated assumptions; the DOJ's largest case seized under a third of the flow it charged, which is the only public ratio to calibrate against."
+/>
+
+**Reading the inspection game.** A smuggler who gets through earns the premium less the cost of intermediaries, transshipment and financing; one who is caught loses the goods, the sunk cost and the fine. The break-even detection probability is the interception rate at which the expected margin is zero, and at an 82 percent premium it is far above anything the public cases imply: Operation Gatekeeper, the largest, seized under a third of the \$160 million it charged, and that is a conviction rate on the flows it found, not on the flows that exist. In the mixed-strategy equilibrium of the inspection game the enforcer inspects just enough to make the smuggler indifferent, and the smuggler ships just enough to make the enforcer indifferent between the cost of looking and the value of catching. Raise the enforcer's valuation of stopping leakage, which is what the Treasury's ten-day letter and three congressional committees do, and the equilibrium smuggling rate falls; raise the premium, which is what Beijing's import freeze on legal H200s does by starving the legal channel, and it rises. The two governments are, in effect, co-managing the grey-market price from opposite ends.
+
+**China's end.** The leakage is a symptom of demand that neither government will let be met legally. Beijing told state-funded data centers in November 2025 to use only domestic chips, discouraged the large platforms from buying H20s, summoned Nvidia over "backdoor" fears in its chips, and then approved only a trickle of H200 imports while ByteDance, Alibaba and Tencent ordered more than 3 million lower-end RTX Pro 5500 cards that fall outside the controls. Huawei's Ascend line is the alternative: Epoch AI estimates about 1.5 million units in 2026, roughly 880,000 H100-equivalents, against about 23 million H100-equivalents from Nvidia, so under 4 percent of Nvidia's compute; IDC had Nvidia at 34 percent and Huawei at 28 percent of China's accelerator shipments in the first half of 2026, with Nvidia's units down 44 percent on the year. Bernstein's forecast has Nvidia's China share going from about 40 percent to 8 percent by year-end. The grey market is what fills the gap between a 4 percent compute substitute and a 92 percent share loss, and it will exist as long as that gap does.
+
+**Why it is a succession issue.** The next CEO inherits an open BIS and Treasury inquiry into whether the company's reported revenue included diverted product, a Singapore prosecution, a Delaware exposure on the board, and a customer base in Southeast Asia that the Bloomberg investigation says the company treated as "an opportunity for America, not a 'red flag' to be feared." An outsider can say the compliance posture was the last regime's; an insider cannot; a reinstated founder owns it. That asymmetry is in the political-cost term of the tree, and it is why the Treasury's preference is not noise.
+
+## How to use the models
+
+Start with the straddle. Pick the first post-report expiry and set the realized move to the average in the table; the long straddle loses, which is the normal outcome and the reason sellers of earnings vol exist. Set it to the maximum in the table and it pays several times its cost. Then switch to a six-month expiry: the implied move is dominated by the long-dated vol, and the P&L depends on where the stock is in May, not on November 17. The event premium is a one-day bet; the uncertainty premium is a position.
+
+In the event study, move the estimation window from 250 sessions to 120 and the beta changes; if the CAR's sign and the t-statistic survive, the result is robust. Then change the event date to November 12. If the CAR is mostly built on the 12th, the market priced the 8-K, not the rumor; if it is built on the 9th and 10th, it priced the Times.
+
+In the tree, hold the Ives scenario and ask what probability of a clean investigation makes reinstatement and the external hire tie; the answer is a number the board will learn before the market does. In the Brown scenario, no probability rescues reinstatement. In the grey-market panel, find the detection rate at which shipping stops at today's premium, then find the premium at which it stops at today's detection rate; the first is enforcement policy, the second is Beijing's import policy, and the distance between the current point and the curve is the size of the business.
+
+## What to watch
+
+- The November 17 print and, more than the print, the guidance from an interim CEO and the China line. The table in the first panel fills in automatically.
+- The long-dated implied vol on the chain. It falls when a permanent CEO is named; it does not fall on earnings.
+- The Wachtell investigation's findings and timing, and whether the board names a search firm or a candidate first. The order is the signal.
+- Bessent's ten-day deadline, which runs to about November 25, and any Treasury or Commerce finding on the Southeast Asia channel; the Senate Banking testimony dates of December 3 and 10.
+- Beijing's H200 import approvals and the Hong Kong inventory; the grey-market quotes Reuters tracks. A narrowing premium means either enforcement or legal supply is working.
+- Arm's share price on every Haas headline, and AMD's: the sector's view of the candidates is in the peers chart.
+
+## What this means for investors
+
+Key-person risk is usually a paragraph in a 10-K that nobody prices until the key person leaves. The option chain prices it the same morning, and the structure of that price tells you what kind of risk it is. A fat front straddle and flat long-dated vol would mean the market expects a single bad quarter; what the chain shows is a modest event premium on top of a persistent one, which is the signature of an unresolved question about control, not about demand. For a holder, that premium is the cost of waiting; for a seller of options, it is the income; for a buyer of the stock, it is the discount the event study measured, and the question is whether it closes on a name or on a number.
+
+The founder-return question is one where the evidence and the crowd disagree, and the crowd has 160,000 signatures. The tree does not say the board should refuse; it says the board should not decide before the probability is known, and that under the view where Huang is irreplaceable the political cost is worth paying only if the investigation lets it be paid once. Investors who believe the Ives view are implicitly betting on the investigation; investors who believe the Brown view are betting on the search. Those are different bets with different dates.
+
+The grey market is the part of this story that outlives the CEO. As long as Chinese demand for accelerators exceeds what either government lets through legally, a premium exists, a channel exists, and Nvidia's reported revenue by geography carries a question mark that the Treasury has now put in writing. Any successor's first strategic decision is how much legal China revenue to fight for against a compliance regime that now treats Southeast Asian growth as a red flag. That decision is worth more to the valuation than who gives the keynote.
+
+This is educational analysis of a live situation, not a recommendation to buy, sell or trade any security or option. The facts are as reported on the dates cited; the investigation, the report, and the search will all change them.

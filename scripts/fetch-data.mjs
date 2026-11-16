@@ -422,6 +422,87 @@ async function fetchAuctions() {
   return { source: 'TreasuryDirect auction results', auctions: rows };
 }
 
+// ---------------------------------------------------------------- Nvidia: options chain, earnings history, peers (week 18)
+// Yahoo's options endpoint needs a session cookie and a crumb.
+const BROWSER_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GamingFinance/1.0';
+async function yahooSession() {
+  const r = await fetch('https://fc.yahoo.com', { headers: { 'User-Agent': BROWSER_UA }, redirect: 'manual', signal: AbortSignal.timeout(20000) });
+  const cookie = (r.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).join('; ');
+  const crumb = await get('https://query1.finance.yahoo.com/v1/test/getcrumb', { json: false, headers: { Cookie: cookie, 'User-Agent': BROWSER_UA } });
+  if (!crumb || crumb.length > 40) throw new Error('no Yahoo crumb');
+  return { cookie, crumb };
+}
+
+// Report dates for the straddle study (fiscal quarter, report date). Extend when a new quarter is reported.
+const NVDA_EARNINGS = [
+  ['FY24 Q3', '2023-11-21'], ['FY24 Q4', '2024-02-21'], ['FY25 Q1', '2024-05-22'], ['FY25 Q2', '2024-08-28'],
+  ['FY25 Q3', '2024-11-20'], ['FY25 Q4', '2025-02-26'], ['FY26 Q1', '2025-05-28'], ['FY26 Q2', '2025-08-27'],
+  ['FY26 Q3', '2025-11-19'], ['FY26 Q4', '2026-02-25'], ['FY27 Q1', '2026-05-20'], ['FY27 Q2', '2026-08-26'],
+  ['FY27 Q3', '2026-11-17'],
+];
+
+async function fetchNvidia() {
+  const px = await chart('NVDA', '5y');
+  await sleep(300);
+  const bench = await chart('SMH', '2y');
+  await sleep(300);
+  const peers = {};
+  for (const t of ['AMD', 'AVGO', 'TSM', 'ARM', 'MRVL']) {
+    const c = await chart(t, '1y');
+    peers[t] = { name: c.name, price: c.price, dates: c.dates, close: c.close };
+    await sleep(300);
+  }
+  const { cookie, crumb } = await yahooSession();
+  const base = await get(`https://query2.finance.yahoo.com/v7/finance/options/NVDA?crumb=${crumb}`, { headers: { Cookie: cookie, 'User-Agent': BROWSER_UA } });
+  const res = base.optionChain?.result?.[0];
+  if (!res) throw new Error('no option chain');
+  const spot = res.quote?.regularMarketPrice ?? px.price;
+  const expiries = (res.expirationDates ?? []).map((e) => new Date(e * 1000).toISOString().slice(0, 10));
+  // Keep the expiries that matter: everything within 10 days, then roughly monthly out to a year.
+  const today = new Date().toISOString().slice(0, 10);
+  const keep = [];
+  let lastKept = null;
+  for (const d of expiries) {
+    const days = Math.round((new Date(d) - new Date(today)) / 86400000);
+    if (days < 0 || days > 400) continue;
+    if (days <= 10 || !lastKept || Math.round((new Date(d) - new Date(lastKept)) / 86400000) >= 25) {
+      keep.push(d);
+      lastKept = d;
+    }
+    if (keep.length >= 12) break;
+  }
+  const options = [];
+  for (const d of keep) {
+    const ts = Math.floor(new Date(`${d}T00:00:00Z`).getTime() / 1000);
+    const o = await get(`https://query2.finance.yahoo.com/v7/finance/options/NVDA?date=${ts}&crumb=${crumb}`, { headers: { Cookie: cookie, 'User-Agent': BROWSER_UA } });
+    const chain = o.optionChain?.result?.[0]?.options?.[0];
+    if (!chain) continue;
+    const mid = (x) => (x.bid > 0 && x.ask > 0 ? (x.bid + x.ask) / 2 : x.lastPrice);
+    const strikes = [...new Set([...chain.calls, ...chain.puts].map((x) => x.strike))].sort((a, b) => Math.abs(a - spot) - Math.abs(b - spot));
+    const atm = strikes[0];
+    const call = chain.calls.find((x) => x.strike === atm);
+    const put = chain.puts.find((x) => x.strike === atm);
+    if (!call || !put) continue;
+    const straddle = mid(call) + mid(put);
+    options.push({
+      expiration: d, days: Math.round((new Date(d) - new Date(today)) / 86400000), strike: atm,
+      call: { bid: call.bid, ask: call.ask, mid: r4(mid(call)), iv: r4(call.impliedVolatility), oi: call.openInterest, vol: call.volume },
+      put: { bid: put.bid, ask: put.ask, mid: r4(mid(put)), iv: r4(put.impliedVolatility), oi: put.openInterest, vol: put.volume },
+      straddle: r4(straddle), impliedMove: r4(straddle / spot),
+      totalOI: chain.calls.reduce((a, x) => a + (x.openInterest ?? 0), 0) + chain.puts.reduce((a, x) => a + (x.openInterest ?? 0), 0),
+      putCallOI: r4(chain.puts.reduce((a, x) => a + (x.openInterest ?? 0), 0) / Math.max(1, chain.calls.reduce((a, x) => a + (x.openInterest ?? 0), 0))),
+    });
+    await sleep(250);
+  }
+  if (!options.length) throw new Error('no option expiries captured');
+  return {
+    source: 'Yahoo Finance (NVDA option chain, daily closes; SMH and peers)',
+    spot, priceTime: px.priceTime, name: px.name, dates: px.dates, close: px.close,
+    bench: { ticker: 'SMH', name: bench.name, dates: bench.dates, close: bench.close },
+    peers, options, earnings: NVDA_EARNINGS,
+  };
+}
+
 // ---------------------------------------------------------------- run
 await mkdir(OUT, { recursive: true });
 // Optional arguments name the snapshots to refresh, e.g. `npm run data -- fred kalshi`.
@@ -435,5 +516,6 @@ const results = await Promise.all([
   maybe('kalshi', fetchKalshi),
   maybe('polymarket', fetchPolymarket),
   maybe('auctions', fetchAuctions),
+  maybe('nvidia', fetchNvidia),
 ]);
 console.log(results.every(Boolean) ? 'All snapshots refreshed.' : 'Some snapshots were not refreshed; see above.');

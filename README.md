@@ -31,6 +31,7 @@ The interactive models take their default inputs from public data, not placehold
 | `polymarket.json` | Polymarket Gamma API: Fed decision events, bid/ask in dollars | Cross-venue arbitrage, Kelly sizer, Fed tree |
 | `auctions.json` | TreasuryDirect: note and bond auction results, two years | Winner's curse |
 | `sectors.json` | Yahoo Finance adjusted closes, 10 years: the eleven SPDR sector ETFs | Sector factor and momentum models |
+| `nvidia.json` | Yahoo Finance: NVDA option chain (ATM straddles at 12 expiries), 5 years of closes, SMH and peer prices, report dates | Earnings straddle, event study |
 | `universe.json` | Yahoo Finance prices and filed fundamentals for 80 large caps across the eleven sectors, reduced to screener metrics (valuation, growth, quality, leverage, risk, momentum) | Screener |
 
 No API keys are needed. `npm run data -- fred kalshi` refreshes only the named snapshots. The deploy workflow runs `npm run data` before every build and also on a weekday schedule (12:30 UTC), so the live site refreshes daily even without a push. A source that fails is skipped and the committed snapshot is used for it. Run `npm run data` locally and commit `src/data/` when you want the repository's fallback snapshot brought up to date.

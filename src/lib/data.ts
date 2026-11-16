@@ -471,3 +471,78 @@ export const universe = {
   sectors: [...new Set(universeFile.stocks.map((s) => s.sector))],
   asOf: universeFile.stocks[0]?.priceDate ?? '',
 };
+
+// ---------------------------------------------------------------- Nvidia: option chain, earnings moves, event study (week 18)
+import nvidiaJson from '../data/nvidia.json';
+export interface OptionQuote { bid: number; ask: number; mid: number; iv: number; oi: number; vol: number }
+export interface OptionExpiry { expiration: string; days: number; strike: number; call: OptionQuote; put: OptionQuote; straddle: number; impliedMove: number; totalOI: number; putCallOI: number }
+interface NvidiaFile {
+  fetched: string; source: string; spot: number; priceTime: string | null; name: string; dates: string[]; close: number[];
+  bench: { ticker: string; name: string; dates: string[]; close: number[] };
+  peers: Record<string, { name: string; price: number; dates: string[]; close: number[] }>;
+  options: OptionExpiry[]; earnings: [string, string][];
+}
+const nvidiaFile = nvidiaJson as NvidiaFile;
+export const nvidia = { ...nvidiaFile, asOf: nvidiaFile.dates[nvidiaFile.dates.length - 1] };
+
+/** Close-to-close move from each report day (reports are after the close) to the next session. */
+export function earningsMoves(): { label: string; date: string; before: number; after: number; move: number }[] {
+  const { dates, close } = nvidiaFile;
+  const out: { label: string; date: string; before: number; after: number; move: number }[] = [];
+  for (const [label, date] of nvidiaFile.earnings) {
+    let i = dates.findIndex((d) => d >= date);
+    if (i < 0) continue;
+    if (dates[i] !== date) i -= 1; // report date was not a session; use the prior close
+    if (i < 0 || i + 1 >= dates.length) continue;
+    out.push({ label, date, before: close[i], after: close[i + 1], move: close[i + 1] / close[i] - 1 });
+  }
+  return out;
+}
+
+export interface EventStudy {
+  eventDate: string; bench: string; estDays: number; gap: number; estStart: string; estEnd: string;
+  alpha: number; beta: number; sigma: number; r2: number;
+  rows: { date: string; r: number; rm: number; ar: number; car: number }[]; // from a few days before the event
+  peers: Record<string, { name: string; rows: [string, number][] }>; // cumulative return since the close before the event
+}
+/** Market-model event study of NVDA against SMH: estimation window, abnormal returns and CAR from the event date. */
+export function nvidiaEventStudy(eventDate = '2026-11-11', estDays = 250, gap = 5, pre = 5): EventStudy {
+  const al = align([nvidiaFile, nvidiaFile.bench]);
+  const r = logReturns(al.close[0]);
+  const rm = logReturns(al.close[1]);
+  const rd = al.dates.slice(1);
+  const e = rd.findIndex((d) => d >= eventDate);
+  const s0 = Math.max(0, e - gap - estDays), s1 = e - gap;
+  const xs = rm.slice(s0, s1), ys = r.slice(s0, s1);
+  const n = xs.length;
+  const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0, sxx = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (xs[i] - mx) * (ys[i] - my);
+    sxx += (xs[i] - mx) ** 2;
+  }
+  const beta = sxy / sxx, alpha = my - beta * mx;
+  let sse = 0, sst = 0;
+  for (let i = 0; i < n; i++) {
+    sse += (ys[i] - alpha - beta * xs[i]) ** 2;
+    sst += (ys[i] - my) ** 2;
+  }
+  const sigma = Math.sqrt(sse / (n - 2));
+  const rows: EventStudy['rows'] = [];
+  let car = 0;
+  for (let i = Math.max(0, e - pre); i < r.length; i++) {
+    const ar = r[i] - alpha - beta * rm[i];
+    if (i >= e) car += ar;
+    rows.push({ date: rd[i], r: +r[i].toFixed(5), rm: +rm[i].toFixed(5), ar: +ar.toFixed(5), car: +car.toFixed(5) });
+  }
+  const peers: EventStudy['peers'] = {};
+  const base = (dates: string[], close: number[]) => {
+    const i = dates.findIndex((d) => d >= eventDate);
+    const b = close[Math.max(0, i - 1)];
+    return dates.slice(Math.max(0, i - pre)).map((d, k) => [d, +(close[Math.max(0, i - pre) + k] / b - 1).toFixed(4)] as [string, number]);
+  };
+  peers.NVDA = { name: nvidiaFile.name, rows: base(nvidiaFile.dates, nvidiaFile.close) };
+  peers.SMH = { name: nvidiaFile.bench.name, rows: base(nvidiaFile.bench.dates, nvidiaFile.bench.close) };
+  for (const [t, p] of Object.entries(nvidiaFile.peers)) peers[t] = { name: p.name, rows: base(p.dates, p.close) };
+  return { eventDate, bench: 'SMH', estDays: n, gap, estStart: rd[s0], estEnd: rd[s1 - 1], alpha, beta, sigma, r2: 1 - sse / sst, rows, peers };
+}
