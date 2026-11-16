@@ -3,17 +3,38 @@ title: "Pricing a Tariff Threat: When Bluffing Is the Equilibrium"
 date: 2026-08-28
 week: 5
 tags: [Game Theory, Geopolitics]
-summary: "A tariff threat only works if it might be carried out, and a trading partner only concedes if the threat is credible. Neither side can commit to a pure strategy, so the equilibrium is a mixture. The solver below lets you edit the payoffs and watch the equilibrium move."
+summary: "A tariff threat only works if it might be carried out, and a trading partner only concedes if the threat is credible. When neither side can commit to a pure strategy, the equilibrium is a mixture, and the mixing probabilities are set by the opponent's payoffs rather than your own. The solver below lets you edit the payoffs and watch the equilibrium move; the text walks through the arithmetic, the 2018 to 2020 and 2025 to 2026 tariff records, and what the structure implies for positioning."
 takeaways:
-  - "When there is no pure-strategy equilibrium, each side randomizes exactly enough to make the other indifferent. The mixing probabilities depend on the opponent's payoffs, not your own."
-  - "Markets that price a tariff as 'on' or 'off' are pricing the wrong thing. The equilibrium is a probability, and the probability moves with the other side's costs."
-  - "Raising the cost of retaliation for the partner lowers the probability the threatener needs to carry out the threat. That is the whole point of escalation dominance."
-  - "Any announced policy that is strictly dominated in the matrix will be reversed. Price the reversal, not the announcement."
+  - "In a mixed-strategy equilibrium each side randomizes exactly enough to make the other indifferent. Your mixing probability is pinned down by the opponent's payoffs, not yours: a more hawkish threatener does not impose more often, it makes the partner concede more often."
+  - "With the default payoffs, bluffing strictly dominates imposing and the only equilibrium is (Bluff, Resist): the threat is ignored. One edit, making a called bluff costlier than a trade war, destroys the pure equilibrium and produces a 60/25 mixture."
+  - "The 2018 to 2019 record is a sequence of threats that were carried out on schedule, postponed, split, raised and partly cancelled; the average US tariff on Chinese goods went from about 3% to about 21% and settled near 19% after Phase One. Headlines that read any one step as a regime change priced the wrong object."
+  - "In 2025 the threat-pause-ratchet-truce cycle ran in weeks rather than years, and in February 2026 the Supreme Court removed the IEEPA instrument altogether. Instruments change; the game does not."
+  - "Markets that price a tariff as 'on' or 'off' are pricing a point when the equilibrium is a probability. The tradable object is the gap between the market's implied probability and the one the payoffs support."
 sources:
   - title: "Peterson Institute for International Economics: trade policy research"
     url: https://www.piie.com/research/trade-investment
   - title: "Nash, J. (1950). Equilibrium points in n-person games"
     url: https://www.pnas.org/doi/10.1073/pnas.36.1.48
+  - title: "PIIE (Bown): Trump and China formalize tariffs on $260 billion of imports (September 2018)"
+    url: https://www.piie.com/blogs/trade-and-investment-policy-watch/2018/trump-and-china-formalize-tariffs-260-billion-imports
+  - title: "PIIE (Bown): US-China trade war, the guns of August (September 2019)"
+    url: https://www.piie.com/blogs/trade-and-investment-policy-watch/us-china-trade-war-guns-august
+  - title: "PIIE (Bown): Phase one China deal, steep tariffs are the new normal (December 2019)"
+    url: https://www.piie.com/blogs/trade-and-investment-policy-watch/phase-one-china-deal-steep-tariffs-are-new-normal
+  - title: "White House fact sheet: tariffs on imports from Canada, Mexico and China (February 1, 2025)"
+    url: https://www.whitehouse.gov/fact-sheets/2025/02/fact-sheet-president-donald-j-trump-imposes-tariffs-on-imports-from-canada-mexico-and-china/
+  - title: "Executive order: progress on the situation at our northern border (February 3, 2025)"
+    url: https://www.whitehouse.gov/presidential-actions/2025/02/progress-on-the-situation-at-our-northern-border/
+  - title: "White House fact sheet: reciprocal tariffs under IEEPA (April 2, 2025)"
+    url: https://www.whitehouse.gov/fact-sheets/2025/04/fact-sheet-president-donald-j-trump-declares-national-emergency-to-increase-our-competitive-edge-protect-our-sovereignty-and-strengthen-our-national-and-economic-security/
+  - title: "Executive order 14266: modifying reciprocal tariff rates to reflect trading partner retaliation and alignment (April 9, 2025)"
+    url: https://www.whitehouse.gov/presidential-actions/2025/04/modifying-reciprocal-tariff-rates-to-reflect-trading-partner-retaliation-and-alignment/
+  - title: "Joint statement on the US-China economic and trade meeting in Geneva (May 12, 2025)"
+    url: https://www.whitehouse.gov/briefings-statements/2025/05/joint-statement-on-u-s-china-economic-and-trade-meeting-in-geneva/
+  - title: "King & Spalding: Supreme Court invalidates the President's IEEPA tariffs in Learning Resources v. Trump (February 2026)"
+    url: https://www.kslaw.com/insights/articles/u-s-supreme-court-invalidates-the-president-s-ieepa-tariffs-in-learning-resources-inc-v-trump
+  - title: "Morgan Lewis: US administration rebuilds global tariff program under Section 301 (July 2026)"
+    url: https://www.morganlewis.com/pubs/2026/07/us-administration-rebuilds-global-tariff-program-under-section-301
 ---
 import PayoffMatrix from '../../components/models/PayoffMatrix.astro';
 
@@ -33,15 +54,19 @@ Payoffs are ordinal welfare rankings, not data: no series measures how a governm
   note="Payoffs (Threatener, Partner). Edit any cell."
 />
 
-## Why no pure equilibrium exists
+## Reading the default matrix
 
-Check each corner. If the partner concedes, the threatener prefers to bluff (4 beats 1). If the threatener bluffs, the partner prefers to resist (2 beats −1). If the partner resists, the threatener prefers to impose (−3 beats 0? No: 0 beats −3, so the threatener bluffs). But if the threatener bluffs and the partner resists, the partner is happy and the threatener wants to switch to imposing only if it improves on 0, which it does not.
+Check each cell for a profitable deviation. If the partner concedes, the threatener prefers to bluff: 4 beats 1. If the partner resists, the threatener still prefers to bluff: 0 beats −3. Bluffing is a strictly dominant strategy for the threatener under the default numbers. The partner knows this, and against a bluff the partner prefers to resist: 2 beats −1. The only cell with no profitable deviation is **(Bluff, Resist)**, and the solver marks it as the pure-strategy Nash equilibrium. The mixed-strategy readout says "no mixed equilibrium," which is correct: a player with a dominant strategy never mixes.
 
-Walk the cycle with the default numbers and you will find one cell where nobody wants to move: that is a pure equilibrium, and the solver marks it. Change the payoff for resisting a real tariff from −4 to −1 and the cycle never closes. Every corner has someone who wants to deviate. The only stable outcome is for both sides to randomize.
+That is a result worth pausing on. Under these payoffs the threat is empty and everyone knows it. The threatener talks, the partner ignores the talk, nothing is imposed, nothing is conceded. A good deal of trade-policy commentary lives in this cell without saying so.
 
-## The mixing condition
+Now make one edit. Change the threatener's payoff in (Bluff, Resist) from 0 to −4. The story behind the number: a bluff that gets called is not costless, because the threatener's credibility in every future negotiation is damaged, and a government that has staked domestic political capital on a threat pays for backing down. With that edit the cycle never closes. If the partner resists, the threatener now prefers to impose (−3 beats −4). If the threatener imposes, the partner prefers to concede (−2 beats −4). If the partner concedes, the threatener prefers to bluff (4 beats 1). If the threatener bluffs, the partner prefers to resist (2 beats −1). Every corner has someone who wants to move. There is no pure equilibrium, and the only stable outcome is for both sides to randomize.
 
-Let $p$ be the probability the threatener imposes and $q$ the probability the partner concedes. The threatener mixes only if indifferent between imposing and bluffing:
+## Mixed strategies and the indifference principle
+
+A mixed strategy is a probability distribution over pure strategies. Nash's 1950 theorem guarantees that every finite game has at least one equilibrium once mixtures are allowed, which is why the solver can always report something.
+
+The mechanics rest on one idea. A player is only willing to randomize between two actions if both give the same expected payoff; otherwise the player would simply pick the better one. So in a mixed equilibrium each player's probabilities are set to make the *other* player indifferent. Let $p$ be the probability the threatener imposes and $q$ the probability the partner concedes. The threatener mixes only if indifferent between imposing and bluffing:
 
 $$
 q\,u_T(I,C) + (1-q)\,u_T(I,R) \;=\; q\,u_T(B,C) + (1-q)\,u_T(B,R)
@@ -56,12 +81,67 @@ $$
 
 This is the result that trips up most commentary. Making the threatener more hawkish (raising their payoff from imposing) does not make them impose more often in equilibrium. It makes the **partner** concede more often, because the partner now needs to concede more to keep the threatener indifferent.
 
+Two readings of the mixture are useful. The literal one is that governments flip coins, which they do not. The better one is Harsanyi's: each side has private information about its own resolve, and the mixing probability is the opponent's belief about that resolve. A 60% probability of imposition means the partner, looking at the threatener's fiscal position, election calendar and domestic coalition, thinks six in ten governments in that position would follow through. Mixed strategies are a model of beliefs under uncertainty about type.
+
+## A worked example
+
+Take the edited matrix: threatener payoffs 1, −3, 4, −4 for (I,C), (I,R), (B,C), (B,R); partner payoffs −2, −4, −1, 2 in the same order.
+
+Threatener indifference: $q \cdot 1 + (1-q)(-3) = q \cdot 4 + (1-q)(-4)$, so $4q - 3 = 8q - 4$ and $q^* = 0.25$. The partner concedes one time in four. Check against the formula: numerator $-4 - (-3) = -1$; denominator $(1 + 3) - (4 + 4) = -4$; ratio 0.25.
+
+Partner indifference: $p(-2) + (1-p)(-1) = p(-4) + (1-p)(2)$, so $-p - 1 = -6p + 2$ and $p^* = 0.6$. The threatener imposes three times in five. Formula: numerator $2 - (-1) = 3$; denominator $(-2 + 4) - (-1 - 2) = 5$; ratio 0.6.
+
+Expected payoffs at the equilibrium are $-2.00$ for the threatener (either row gives $0.25 \times 1 + 0.75 \times (-3)$) and $-1.60$ for the partner. Both sides are worse off than in a world where the threat was never made, which is the standard result for coercion games: the equilibrium of mutual uncertainty is a tax on both players.
+
+Now the comparative static that matters. Raise the threatener's payoff from a successful imposition, $u_T(I,C)$, from 1 to 3. The new $q^*$ is $(-1)/((3 + 3) - 8) = 0.5$. The partner concedes twice as often, while $p^*$ is unchanged at 0.6 because the partner's payoffs did not move. Hawkishness bought compliance without buying a single additional tariff. That is escalation dominance in one line of algebra.
+
 ## The best-response diagram
 
 The chart plots each side's best response as a function of the other's mixing probability. The threatener's best response is a step in $p$ that flips at $q^*$; the partner's is a step in $q$ that flips at $p^*$. Where the two steps cross is the equilibrium. When they cross at a corner, it is a pure equilibrium. When they cross in the interior, both sides are randomizing.
 
 Drag a few numbers. Lower the partner's cost of resisting a real tariff and watch $p^*$ rise: the threatener has to impose more often to keep the partner guessing. Raise the threatener's cost of imposing and $q^*$ falls: the partner can afford to resist more.
 
+## How to use the model
+
+Three experiments, each a single cell edit from the state before it.
+
+**Experiment 1: the empty threat.** Leave the defaults. The readout shows one pure equilibrium, (Bluff, Resist), and no mixed one. On the diagram the threatener's best-response line sits at $p = 0$ for every $q$, which is what a dominant strategy looks like. Any announced policy that is strictly dominated in the matrix will be reversed, so price the reversal, not the announcement.
+
+**Experiment 2: credibility has a price.** Set the threatener's (Bluff, Resist) payoff to −4. The pure equilibrium disappears and the mixed readout shows $p = 0.600$, $q = 0.250$, with expected payoffs (−2.00, −1.60). The dot on the diagram moves into the interior. This is the game most live tariff disputes are actually in.
+
+**Experiment 3: the partner's pain.** From the Experiment 2 matrix, raise the partner's (Impose, Resist) payoff from −4 to −3, meaning resisting a real tariff hurts a little less, perhaps because export substitutes exist. $p^*$ rises from 0.60 to 0.75: the threatener must impose more often to hold the partner at indifference. Then push the threatener's (Impose, Resist) payoff from −3 down to −5 instead. The denominator flips sign and the readout says the solution is outside $(0,1)$: bluffing is dominant again and (Bluff, Resist) returns as the only equilibrium. A trade war that is costly enough to the threatener makes the threat non-credible, which is the partner's whole strategy.
+
+## What the record shows: 2018 to 2020
+
+The first round of the US-China trade war is a useful laboratory because the threats were specific, dated and public, and PIIE's Chad Bown tracked every one. The United States imposed 25% duties on \$34 billion of Chinese imports on July 6, 2018, and on a further \$16 billion on August 23, 2018. A third tranche of \$200 billion took effect on September 24, 2018, at 10%, with an announced increase to 25% on January 1, 2019. That increase was postponed and then carried out in May 2019. China retaliated on a \$50 billion list and then on a \$60 billion list at rates it cut from 5 to 25% down to 5 to 10% as the US list grew, which is what a partner mixing toward Concede looks like in practice.
+
+The 2019 sequence shows the mixture even more clearly. On August 1, 2019, the President announced a 10% tariff on the remaining roughly \$300 billion of imports for September 1. On August 13 the trade representative split that list in two and delayed the second half to December 15. On August 23 the rate on both halves was raised to 15% and China announced tariffs on \$75 billion of US exports. The first list, about \$112 billion of consumer goods, took effect September 1. The December 15 list never did: the Phase One agreement cut the September tariffs from 15% to 7.5% and cancelled the December tranche outright. By Bown's arithmetic the average US tariff on Chinese imports went from about 3% in January 2018 to 21.0% in September 2019, with 26.6% scheduled had the December list gone ahead, and settled at 19.3% after Phase One with 64.5% of imports still covered. Each of those steps was an announcement; the realized path was a sequence of draws, and roughly a third of the threatened escalation was never imposed.
+
+## 2025 to 2026: the same game at higher frequency
+
+The second episode compressed the cycle. On February 1, 2025, the administration announced 25% tariffs on Canada and Mexico (10% on Canadian energy) and 10% on China under IEEPA. Two days later, on February 3, the Canada and Mexico tariffs were paused until March 4 after border commitments: a threat, a concession, a draw from the mixture, all inside one weekend. On April 2 an executive order imposed a 10% baseline on all countries from April 5 and higher country-specific rates from April 9. On April 9 itself a further order suspended the country-specific rates for most partners until July 9, leaving the 10%, while raising the additional duty on China from 84% to 125% in response to China's announced 84% retaliation. On May 12 in Geneva the two sides agreed to suspend 24 percentage points of the April 2 tariff for 90 days, leaving 10% in place, to remove the April 8 and 9 orders entirely, and for China to mirror both steps. Read as a matrix: Impose, Resist, Impose harder, Resist harder, then a negotiated move back toward the interior.
+
+Then the instrument itself was removed. On February 20, 2026, the Supreme Court held 6 to 3 in Learning Resources v. Trump that IEEPA confers no tariff power. Section 232 and existing Section 301 tariffs stayed in force, a temporary 10% global surcharge under Section 122 ran from February 24 until its 150-day limit expired on July 24, 2026, and Section 301 duties of 10% or 12.5% on sixty economies replaced it the same minute. The threatener's payoffs changed: the cheapest instrument was gone, imposing became slower and more procedural, and by the logic above that lowers $q^*$, the probability partners need to concede. It does not end the game.
+
+## What to watch
+
+The payoffs in the matrix are unobservable, but the things that move them are not.
+
+- **The threatener's cost of imposing.** Domestic inflation prints, the election calendar, and farm-state or import-dependent sector pressure all raise $u_T(I,R)$ in absolute terms. Court rulings and procedural constraints do the same by slowing the instrument.
+- **The partner's cost of resisting.** Export exposure to the threatener's market, the availability of substitute buyers, fiscal room for domestic offsets, and the partner's own political calendar.
+- **The cost of a called bluff.** Watch how much a government stakes publicly on a threat. The more it commits, the more negative $u_T(B,R)$ becomes and the more likely the game is in the mixed region rather than the empty-threat corner.
+- **Deadlines and pauses.** A pause is a draw of Bluff that keeps the option to Impose alive; count how many pauses expire into imposition versus extension. The ratio is an empirical estimate of $p$.
+
 ## What this means for investors
 
-A tariff headline is a draw from a mixed strategy. The market usually prices it as a regime change. The gap between those two things is where the opportunity sits. The equilibrium probability is a function of both sides' payoffs, and those payoffs are readable: fiscal position, election timing, the share of exports exposed, the depth of substitutes. When a payoff moves, the equilibrium probability moves with it, and it moves in the direction the formulas above dictate, which is often the opposite of what intuition suggests.
+A tariff headline is a draw from a mixed strategy. The market usually prices it as a regime change. The gap between those two things is where the opportunity sits, and it shows up differently by instrument.
+
+**Equities.** Exposed sectors tend to reprice fully on announcement and partially unwind on pause. If the equilibrium is a probability near $p^*$, the fair move on an announcement is the move conditional on imposition times the probability of imposition, not the full move. Single names with high import content or export dependence are the ones whose announcement-day moves most exceed that.
+
+**FX.** The partner's currency is the cleanest expression of $q^*$. Concession probability rises when the threatener's payoff from imposing rises; the currency weakens on the threat and recovers on concession or truce, and the recovery is usually the larger of the two moves.
+
+**Rates and volatility.** Tariff episodes raise realized volatility in both directions because the draws are frequent. Option-implied volatility that is priced for a one-time regime change rather than repeated draws tends to be too cheap at the start of an episode and too rich after the first truce.
+
+**Credit.** Importers with thin margins carry the imposition cost; exporters in the partner country carry the resistance cost. Spread moves track the pure outcomes, so the mixture gives mean-reverting spread episodes rather than a trend.
+
+The equilibrium probability is a function of both sides' payoffs, and those payoffs are readable: fiscal position, election timing, the share of exports exposed, the depth of substitutes. When a payoff moves, the equilibrium probability moves with it, in the direction the formulas above dictate, which is often the opposite of what intuition suggests. This is an educational model, not a forecast or investment advice.

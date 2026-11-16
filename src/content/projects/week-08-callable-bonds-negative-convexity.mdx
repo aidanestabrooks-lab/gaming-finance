@@ -3,12 +3,13 @@ title: "Negative Convexity: Why Your Callable Bonds Won't Rally"
 date: 2026-09-18
 week: 8
 tags: [CFA, Markets]
-summary: "When rates fall, callable bonds and agency mortgage-backed securities rally less than their duration says they should, because the issuer's option to refinance is worth more. A calibrated binomial interest rate tree makes the option visible, solves the option-adjusted spread, and measures the effective duration and convexity that a cutting cycle actually delivers."
+summary: "When rates fall, callable bonds and agency mortgage-backed securities rally less than their duration says they should, because the issuer's option to refinance is worth more. A binomial interest rate tree calibrated to today's Treasury par curve makes the option visible, solves the option-adjusted spread, and measures the effective duration and convexity that a cutting cycle actually delivers. The same mechanics explain the 2022 agency MBS drawdown and the convexity-hedging episodes of 1994, 2003 and 2013."
 takeaways:
-  - "A callable bond is an option-free bond minus a call option. Everything that raises the option's value (lower rates, higher volatility) lowers the bond's price relative to a straight bond."
+  - "A callable bond is an option-free bond minus a call option. Everything that raises the option's value (lower rates, higher volatility, an earlier call date) lowers the bond's price relative to a straight bond."
+  - "Nominal spread, Z-spread and OAS answer different questions. Only the OAS strips out the option, so only the OAS tells you whether a callable is cheap. For a callable, OAS is below the Z-spread by the option cost."
   - "Effective duration, not modified duration, is the right measure when cash flows depend on rates. For a callable near its call price, effective duration can fall by half as rates drop."
-  - "Negative convexity means the bond gains less when yields fall than it loses when they rise. In a cutting cycle that is a direct cost to holders of callables and MBS."
-  - "The option-adjusted spread strips out the option. Compare OAS, not nominal spread, when deciding whether a callable is cheap."
+  - "Negative convexity means the bond gains less when yields fall than it loses when they rise. Agency MBS carry the same profile through the homeowner's prepayment option; the 2022 selloff and the 2003 and 2013 convexity-hedging episodes are the market-wide version."
+  - "Rate volatility is an input, not a detail. Raising assumed volatility lowers a callable's model value and, at a fixed market price, lowers its OAS. Two dealers quoting different OAS on the same bond are usually quoting different volatilities."
 sources:
   - title: "CFA Institute: Valuation and Analysis of Bonds with Embedded Options (Level II)"
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/valuation-analysis-bonds-embedded-options
@@ -16,6 +17,20 @@ sources:
     url: https://www.newyorkfed.org/markets/domestic-market-operations/monetary-policy-implementation/agency-mortgage-backed-securities
   - title: "FRED: Treasury constant-maturity yields (DGS1–DGS30), Board of Governors H.15"
     url: https://fred.stlouisfed.org/series/DGS5
+  - title: "Federal Reserve H.4.1: Factors Affecting Reserve Balances (SOMA holdings of agency MBS)"
+    url: https://www.federalreserve.gov/releases/h41/current/
+  - title: "SIFMA: US Mortgage-Backed Securities Statistics"
+    url: https://www.sifma.org/research/statistics/us-mortgage-backed-securities-statistics
+  - title: "Structured Finance Association: Reassessing the Single-Family Agency CMO Market (Dec 2025)"
+    url: https://structuredfinance.org/wp-content/uploads/2025/12/SFJournal_Reassessing-the-Single-Family-Agency-CMO-Market_Implications-for-MBS-Pool-Liquidity.pdf
+  - title: "LSEG: December 2022 US agency MBS market annual recap"
+    url: https://www.lseg.com/en/insights/data-analytics/december-22-us-mbs-agency-market-annual-recap
+  - title: "Liberty Street Economics (NY Fed): Convexity event risks in a rising interest rate environment (2014)"
+    url: https://libertystreeteconomics.newyorkfed.org/2014/03/convexity-event-risks-in-a-rising-interest-rate-environment/
+  - title: "Perli, R. and Sack, B. (2003). Does mortgage hedging amplify movements in long-term interest rates? FEDS 2003-49"
+    url: https://www.federalreserve.gov/pubs/feds/2003/200349/200349pap.pdf
+  - title: "FHLBanks Office of Finance: About callable bonds"
+    url: https://legacy.fhlb-of.com/ofweb_userWeb/pageBuilder/about-callable-bonds-49
 ---
 import RateTree from '../../components/models/RateTree.astro';
 import { parYield, curveAsOf, yieldVol, shortDate } from '../../lib/data';
@@ -28,6 +43,13 @@ export const slope = (parYield(5) - parYield(1)).toFixed(2);
 export const shape = parYield(5) > parYield(1) ? 'upward sloping' : parYield(5) < parYield(1) ? 'inverted' : 'flat';
 export const vol = (100 * yieldVol('DGS5')).toFixed(0);
 export const cpn = (Math.round(parYield(5) * 8) / 8).toFixed(3);
+export const y2 = parYield(2).toFixed(2);
+export const y3 = parYield(3).toFixed(2);
+export const y30 = parYield(30).toFixed(2);
+export const tenThirty = (100 * (parYield(30) - parYield(10))).toFixed(0);
+export const vol10 = (100 * yieldVol('DGS10')).toFixed(0);
+export const bpMove = Math.round(parYield(5) * yieldVol('DGS5') * 100);
+export const belowCpn = (parYield(5) - 1).toFixed(2);
 
 ## The setup
 
@@ -39,9 +61,21 @@ The Level II toolkit for this is the **binomial interest rate tree**. Build a la
 
 <RateTree id="callable" />
 
+## Why a tree at all
+
+An option-free bond does not need a tree: discount each cash flow at the matching spot rate and you have the arbitrage-free value. The tree earns its keep when a cash flow depends on the path of rates, because a call, a put or a prepayment is decided at a future date on the basis of rates at that date. The Level II convention is a recombining lattice with equal probabilities of an up and a down move, the two rates linked by the volatility assumption:
+
+$$
+r_u = r_d\,e^{2\sigma}
+$$
+
+so that the log of the rate is normally distributed. Lognormal rates cannot go negative, and node spacing grows with the level of rates, which matches experience. With {vol}% volatility and a five-year yield of {y5}%, one standard deviation of the one-year change in that yield is about {bpMove} basis points, the scale of fan-out in the tree table.
+
 ## Calibration
 
 The lowest rate at each year is solved so that a par bond of that maturity prices at exactly 100 on the tree; the other nodes are $r_{t,i} = r_{t,0}\, e^{2\sigma i}$. That is the Level II construction, and it guarantees the tree is arbitrage-free against the inputs. Raise the volatility slider and watch the nodes fan out while the calibrated par bonds still price at par: the tree's *center* adjusts so the expectation is unchanged.
+
+The solving is sequential. Year 1 has a single rate, the one-year par yield. For year 2, guess the low node, set the high node at $e^{2\sigma}$ times it, price the two-year par bond by backward induction, and adjust the guess until the price is 100. Repeat for year 3 using the year-2 nodes already fixed. Each year adds one unknown and one equation. The model's straight bond is priced on the same tree as the callable so that the difference between them is purely the option.
 
 ## Pricing the call
 
@@ -53,26 +87,94 @@ $$
 
 The option is exercised in the low-rate states, which are exactly the states where an option-free bond would be worth the most. That asymmetry is negative convexity in one line.
 
-## OAS, effective duration, effective convexity
+The decomposition the exam wants is
 
-Give the model a market price and it solves, by bisection, for the constant spread added to every node that makes the tree price match. That spread is the **option-adjusted spread**: the compensation you earn for credit and liquidity *after* the option has been paid for. Two callables with different coupons can have very different nominal spreads and the same OAS.
+$$
+V_{\text{callable}} = V_{\text{straight}} - V_{\text{call}}, \qquad V_{\text{putable}} = V_{\text{straight}} + V_{\text{put}}
+$$
 
-Effective duration and convexity are computed the only way that makes sense for a rate-dependent cash flow: shift the entire par curve up and down, rebuild the tree each time, reprice at constant OAS, and difference:
+The investor in a callable is short the option; the investor in a putable is long it. Everything that raises option value, lower rates, higher volatility, a longer exercise window or a lower call price, widens the gap between the straight bond and the callable. Nobody pays 108 for a bond the issuer can take back at 100 next year, and that cap is the whole story of the price-yield chart.
+
+## Nominal spread, Z-spread, OAS
+
+There are three ways to quote the spread on a bond with an embedded option, and only one of them is comparable across bonds.
+
+The **nominal spread** is the bond's yield to maturity minus the yield of a Treasury of similar maturity. It ignores the shape of the curve and the option, and for a callable it uses a yield to maturity on cash flows that may never arrive.
+
+The **Z-spread** (zero-volatility spread) is the constant spread added to every Treasury spot rate that makes the discounted cash flows equal the price. It respects the curve. It still assumes the scheduled cash flows are paid in full, which, for a callable, means it treats the option as worthless.
+
+The **option-adjusted spread** is the constant spread added to every node of the tree that makes the tree value equal the market price, with the call exercised optimally at each node. It is the compensation for credit and liquidity *after* the option has been priced out:
+
+$$
+\text{OAS} = \text{Z-spread} - \text{Option cost} \quad \text{(callable)}, \qquad \text{OAS} = \text{Z-spread} + \text{Option cost} \quad \text{(putable)}
+$$
+
+A callable with a wide nominal spread can have a thin OAS; the difference is pay for being short the option, not for the issuer's credit. Two callables with different coupons and call schedules can have very different nominal spreads and the same OAS, and the OAS is the one that should drive a relative-value decision.
+
+Give the model a market price and it solves, by bisection, for the OAS. The market-price slider starts at the callable's model value, so the OAS reads near zero; lower the price and the OAS widens one for one. The OAS also depends on the volatility assumption: raise the volatility slider at a fixed price and the OAS falls, because more of the yield is attributed to the option.
+
+## Effective duration, effective convexity
+
+Modified duration assumes the cash flows are fixed. For a callable they are not, so the right measure is numerical: shift the entire par curve up and down, rebuild the tree each time, reprice at constant OAS, and difference:
 
 $$
 D_{\text{eff}} = \frac{P_{-} - P_{+}}{2\,P_0\,\Delta y}, \qquad C_{\text{eff}} = \frac{P_{-} + P_{+} - 2P_0}{P_0\,(\Delta y)^2}
 $$
 
-With today's curve and volatility, the callable's effective duration is well below the straight bond's and its effective convexity is negative. Type a five-year par yield 100 basis points below {y5}% into the curve table and the duration falls further: the bond is converging on its call price and has stopped behaving like a bond. The market-price slider starts at the callable's model value, so the OAS reads near zero; lower the price and the OAS widens one for one with the discount.
+Holding OAS constant through the shift makes this a measure of interest-rate risk alone. Three results follow. The callable's effective duration is below the straight bond's at every rate level, because in the low-rate states the bond is worth the call price however far rates fall. Its effective duration *falls* as rates fall and *rises* as rates rise, the opposite of an option-free bond. And its effective convexity is negative wherever the call is near the money, turning positive only when rates are far above the coupon.
+
+With today's curve and volatility, the callable's effective duration is well below the straight bond's and its effective convexity is negative. Type a five-year par yield 100 basis points below {y5}% into the curve table, {belowCpn}%, and the duration falls further: the bond is converging on its call price and has stopped behaving like a bond. Type a yield 150 basis points above and the two durations converge; the call is now a lottery ticket the issuer is unlikely to use.
+
+The shock size matters too, because the price function has a kink: the duration-shock slider shows that a 5-basis-point shock measures the local slope while a 100-basis-point shock averages over the kink. Practitioners quote one-sided durations for this reason; for a callable the down-rate duration is shorter than the up-rate duration.
 
 ## Why the calibration curve is live
 
 Negative convexity is a statement about the *level* of rates relative to the coupon. The same callable is nearly a straight bond when the curve sits well above its coupon and nearly a cash substitute when the curve sits well below it. Because the panel reads the Treasury curve on every rebuild, the model's starting point is wherever the market actually is on {asOf}, and the price-yield chart below is centered on that point rather than on a textbook example.
 
+The current curve runs {y1}% at one year, {y2}% at two and {y3}% at three, against {y5}% at five; the long end is {y30}% at thirty, {tenThirty} basis points from the ten-year. Realized volatility of the ten-year yield over the past year has been {vol10}%, against {vol}% for the five-year. The forward rates embedded in this curve, not the spot level alone, decide how far in or out of the money the option is at each call date.
+
 ## The price-yield chart
 
 The right-hand chart reprices both bonds across a −200 to +200 basis point parallel shift. The straight bond curves upward (positive convexity). The callable flattens into the call price as yields fall. The gap between the two curves at any shift is the call option's value at that level of rates.
 
+## Agency MBS: the same option, held by homeowners
+
+An agency mortgage-backed security is a pool of fixed-rate mortgages whose borrowers can prepay at par at any time: a callable bond with a diffuse, behavioral exercise rule. When rates fall, refinancing accelerates and principal returns early, at par, when the investor least wants it (**contraction risk**). When rates rise, refinancing stops and the security's life extends just as prices fall (**extension risk**). The combination is negative convexity, most severe for pools whose coupon sits near the current mortgage rate.
+
+The market is large enough that this matters for everyone. Agency MBS outstanding exceeded \$9.3 trillion at the end of 2025, according to the Structured Finance Association, and SIFMA reports \$1.75 trillion of issuance in the first ten months of 2026, up 14% year over year. The Federal Reserve held \$1.88 trillion of agency MBS as of November 11, 2026, down \$186 billion over the year as it lets principal run off. The Fed's holdings matter because the Fed does not hedge. New York Fed research on the 2013 selloff argued that the Fed's ownership of more than 20% of the MBS stock, concentrated in the most negatively convex vintages, is part of why the ten-year's move from 1.70% to 2.90% that summer did not trigger a 1994- or 2003-style convexity event. As the Fed's share shrinks, that risk migrates back to balance sheets that do hedge.
+
+The 2022 episode is the clearest demonstration at the market level. The LSEG year-end recap records that the 30-year current-coupon mortgage rate rose 329 basis points during 2022 while the ten-year Treasury rose 220, and the Bloomberg US MBS index returned −11.89% against −13.25% for Treasuries. The low-coupon pools issued in 2020 and 2021 fell roughly 15 points to the \$77 to \$85 range as their expected lives extended from a few years to well over a decade. They had been bought as short-duration instruments; extension made them long ones.
+
+The mechanism can feed on itself. Perli and Sack at the Federal Reserve Board documented how hedgers of MBS duration, including Fannie Mae and Freddie Mac, must sell Treasuries or pay fixed in swaps as rates rise and their portfolios extend, which pushes rates higher still. In 2003 the option-adjusted duration of a major MBS index lengthened by about two years on a rise of roughly 75 basis points in mortgage rates. A **convexity event** is the name for this loop.
+
+## Agency callables and the rest of the family
+
+Callable bonds are not only a corporate instrument. The Federal Home Loan Banks, Farm Credit and Freddie Mac fund themselves heavily with callable debt, typically Bermudan (callable on a schedule after a lockout) or European (one call date), and the FHLBanks' Office of Finance describes callables as a long-standing core of its issuance. Bank preferreds and many municipal bonds carry the same structure. The extra coupon on all of them is the option premium, received in installments. The tree prices every variant: a longer lockout is the first-call slider, a call premium is the call-price slider, and the lesson does not change. The yield pickup on a callable is only a pickup if the OAS is wider than on the comparable straight bond.
+
+## How to use the model
+
+**Measure the duration collapse.** Note the callable's effective duration at the current curve. Type a five-year par yield 100 basis points lower into the curve table and read it again, then 100 basis points higher. The down-rate duration should be a fraction of the up-rate duration; that asymmetry is what a report based on modified duration will miss.
+
+**Price volatility.** Leave the market price where it is and drag the volatility slider from its realized starting point of {vol}% up to 30%, then down to 10%. The callable's model value and its OAS at the fixed price move with it while the straight bond does not. This is the range over which two dealers can disagree about the same bond.
+
+**Shorten the option.** Move the first-call slider from year 1 to year 4: the gap between straight and callable shrinks, effective duration rises toward the straight bond's, and convexity moves toward zero. Then lower the call price from 100 to 98 and watch the price-yield chart flatten earlier. These two sliders are the difference between a make-whole call, nearly worthless to the issuer, and a par call after a short lockout.
+
+## What to watch
+
+- **The level of the curve against your coupons.** Negative convexity bites when the market rate is at or below the coupon. Callables bought when yields were above today's {y5}% at five years are bonds whose options are in the money.
+- **Realized and implied rate volatility.** The model uses realized volatility of {vol}%; swaption-implied volatility is the market's forward-looking version, and higher volatility raises the value of every call the market is short.
+- **The mortgage rate against the outstanding coupon stack.** The share of agency MBS with a refinancing incentive is the share whose duration will shorten abruptly in a rally.
+- **Fed balance-sheet policy.** Runoff of the Fed's \$1.88 trillion in MBS returns convexity risk to hedgers; a return to reinvesting paydowns in MBS would reverse that.
+
 ## What this means for investors
 
 Agency MBS, callable agencies, and most callable corporates and preferreds carry this profile. In a cutting cycle, the holder of a callable gets a smaller rally, a shorter duration, and an elevated chance of being handed cash to reinvest at lower yields. The OAS tells you whether you are being paid for it. If the OAS on a callable is not meaningfully wider than on a comparable straight bond, you are giving the option away.
+
+By instrument, for education rather than advice:
+
+- **Individual callable bonds and brokered CDs.** The quoted yield is a yield to maturity on cash flows the issuer controls. Ask for the yield to worst and the OAS, and compare the OAS to a bullet of the same credit.
+- **Agency MBS funds and the aggregate bond index.** Roughly a quarter of the US aggregate index is agency MBS, so a core bond fund is short the homeowner's option: it lags a Treasury fund of the same stated duration in a rally and extends in a selloff.
+- **Mortgage REITs and bank balance sheets.** These hold MBS with leverage and hedge duration with swaps or Treasuries. Rebalancing those hedges in a fast market is negative convexity turned into a cash expense, as 2022 and 2023 showed.
+- **Preferred stock and callable munis.** A position bought above par can be redeemed at 100 after the lockout. The yield to call, not the current yield, describes the position.
+
+Duration describes a bond whose cash flows are fixed. The moment someone else decides when you get paid, you need a tree.

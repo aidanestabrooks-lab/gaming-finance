@@ -3,11 +3,12 @@ title: "Export Controls as a Three-Player Dynamic Game"
 date: 2026-11-13
 week: 16
 tags: [Game Theory, Geopolitics, Firms]
-summary: "The United States tightens chip export controls, China retaliates or indigenizes, and the foundry in the middle decides where to build. Played over several rounds, that is an extensive-form game with tens of thousands of histories. The engine below generates the whole tree from a state model, solves it by backward induction in milliseconds, and sweeps the parameters to show where the equilibrium flips."
+summary: "The United States tightens chip export controls, China retaliates or indigenizes, and the foundry in the middle decides where to build. Played over several rounds, that is an extensive-form game with tens of thousands of histories. The engine below generates the whole tree from a state model, solves it by backward induction in milliseconds, and sweeps the parameters to show where the equilibrium flips. The text sets out the formal structure, maps four years of BIS rules and Chinese counter-moves onto the model's actions, and walks through the slider experiments that matter."
 takeaways:
-  - "A multi-round game is solved from the last round backward. The first move depends on every rational response to it, which is why a policy that looks strong in isolation can be an equilibrium loser."
-  - "Export controls that accelerate indigenization carry their own expiry date. In the model, raising the indigenization speed flips the US opening move from Tighten to Hold well before controls become ineffective."
-  - "The foundry's diversification decision is a hedge whose value rises with escalation. TSMC's overseas fabs are the equilibrium response to the other two players' incentives, not just to subsidies."
+  - "A multi-round game is solved from the last round backward. The first move depends on every rational response to it, which is why a policy that looks strong in isolation can be an equilibrium loser, and why the tree must be generated from a state model rather than written down."
+  - "With the default parameters the United States tightens, pauses, and tightens again; China indigenizes rather than retaliates in every round but the last; TSMC diversifies from round one. Retaliation is expensive under quadratic escalation costs, and self-sufficiency is the move that changes China's payoff."
+  - "Indigenization speed changes the end of the path before it changes the beginning: at a fast enough speed the US loosens in the final round because the lead is no longer worth defending. Control effectiveness is the parameter that flips the opening move, and the sensitivity map shows a band, not a corner, where the opening becomes Hold."
+  - "The record fits the model's actions: three tightening rounds in October 2022, October 2023 and December 2024; a Chinese 7-nanometer phone chip in 2023 and mineral export bans in 2024 and 2025; and a sequence of US loosening moves in 2025 and 2026, from H20 licenses to a stayed affiliates rule, as the cost of escalation became visible."
   - "Sensitivity maps matter more than point solutions. The boundaries between equilibrium regions are where small changes in beliefs produce large changes in policy, and markets price those boundaries badly."
 sources:
   - title: "Bureau of Industry and Security: Advanced computing and semiconductor export controls"
@@ -16,6 +17,40 @@ sources:
     url: https://www.csis.org/
   - title: "Fudenberg, D. & Tirole, J. (1991). Game Theory (subgame-perfect equilibrium in multistage games)"
     url: https://mitpress.mit.edu/9780262061414/game-theory/
+  - title: "BIS press release: new export controls on advanced computing and semiconductor manufacturing items to the PRC (October 7, 2022)"
+    url: https://www.bis.gov/press-release/commerce-implements-new-export-controls-advanced-computing-semiconductor-manufacturing-items-peoples
+  - title: "BIS press release: strengthened restrictions on advanced computing semiconductors and semiconductor manufacturing equipment (October 17, 2023)"
+    url: https://www.bis.gov/press-release/commerce-strengthens-restrictions-advanced-computing-semiconductors-semiconductor-manufacturing-equipment
+  - title: "BIS press release: controls to restrict China's capability to produce advanced semiconductors (December 2, 2024)"
+    url: https://www.bis.gov/press-release/commerce-strengthens-export-controls-restrict-chinas-capability-produce-advanced-semiconductors-military
+  - title: "Commerce press release: rescission of the AI Diffusion Rule and new chip-related guidance (May 13, 2025)"
+    url: https://www.bis.gov/press-release/department-commerce-rescinds-biden-era-artificial-intelligence-diffusion-rule-strengthens-chip-related
+  - title: "Silicon UK: Huawei phone teardown reveals China chip advances (September 5, 2023)"
+    url: https://www.silicon.co.uk/workspace/components/huawei-phone-teardown-reveals-china-chip-advances-528009
+  - title: "TechInsights: China's SMIC plays 7 nm card"
+    url: https://www.techinsights.com/blog/chinas-smic-plays-7-nm-card
+  - title: "Al Jazeera: China hits back against US chip crackdown with gallium, germanium and antimony export ban (December 3, 2024)"
+    url: https://www.aljazeera.com/economy/2024/12/3/china-hits-back-against-us-chip-crackdown
+  - title: "CNBC: Nvidia to record $5.5 billion charge tied to H20 processors exported to China (April 15, 2025)"
+    url: https://www.cnbc.com/2025/04/15/nvidia-says-it-will-record-5point5-billion-quarterly-charge-tied-to-h20-processors-exported-to-china.html
+  - title: "NVIDIA blog: Huang in Washington and Beijing, H20 licenses to be granted (July 14, 2025)"
+    url: https://blogs.nvidia.com/blog/nvidia-ceo-promotes-ai-in-dc-and-china/
+  - title: "Transport Topics (Bloomberg): Nvidia and AMD agree to 15% chip revenue share with US (August 11, 2025)"
+    url: https://www.ttnews.com/articles/nvidia-amd-chip-revenue-share
+  - title: "The Register: Beijing summons Nvidia over alleged backdoors in China-bound AI chips (July 31, 2025)"
+    url: https://www.theregister.com/2025/07/31/beijing_nvidia_backdoors/
+  - title: "Implicator: China hits Nvidia with antitrust violation during trade talks (September 15, 2025)"
+    url: https://www.implicator.ai/china-hits-nvidia-with-antitrust-violation-during-trade-talks.md
+  - title: "FDD: China pauses some rare earth export curbs while retaining levers of control (November 2025)"
+    url: https://www.fdd.org/analysis/china-pauses-some-rare-earth-export-curbs-while-retaining-levers-of-control/
+  - title: "China Briefing: US and China reach trade concessions following the Trump-Xi meeting (November 2025)"
+    url: https://www.china-briefing.com/news/trump-xi-meeting-outcomes-and-implications/
+  - title: "Morrison Foerster: United States and China reach trade agreement, takeaways for export and supply chain controls (November 13, 2025)"
+    url: https://www.mofo.com/pdf/resources/insights/251113-united-states-and-china-reach-trade-agreement
+  - title: "Global Trade and Sanctions Law: BIS extends suspension of the Affiliates Rule to January 2027 (November 2026)"
+    url: https://www.globaltradeandsanctionslaw.com/bis-extends-suspension-affiliates-rule-january-2027/
+  - title: "gCaptain (Reuters): China extends US trade truce by two months (November 9, 2026)"
+    url: https://gcaptain.com/china-extends-us-trade-truce-by-two-months/
 ---
 import DynamicGame from '../../components/models/DynamicGame.astro';
 
@@ -27,6 +62,12 @@ The tree has $18^R$ terminal histories. For $R = 3$ that is 5,832; for $R = 4$ i
 
 <DynamicGame id="export" note="Structural model: the state transitions and payoff weights are modeling choices, not observed data, and there is no data series that would pin them down. Not a forecast. Every parameter is exposed so you can disagree with it." />
 
+## The formal structure
+
+A multistage game is an extensive-form game in which players move in a fixed order within each stage, observe everything that has happened, and receive payoffs only at the end. The solution concept is subgame-perfect equilibrium: a strategy for every player that is optimal at every node, including nodes that the equilibrium path never reaches. It is computed by backward induction, which is dynamic programming under another name: at the last decision node the mover picks the action that maximizes their own component of the payoff vector, that choice replaces the node with a value, and the process repeats one level up until the root is reached.
+
+Two features of this game make the structure heavier than a textbook tree. First, payoffs are **state-dependent**. What the United States gets from tightening in round two depends on how self-sufficient China already is, which depends on what China did in round one. There is no fixed number in any cell; every leaf is a function evaluated on a path. Second, the **curse of dimensionality**. With three players, eighteen joint action combinations per round, and a continuous state, the number of histories grows as $18^R$, and the state after each history is distinct, so there is nothing to merge. Writing the tree down is impossible past two rounds. What is possible is to write down the rules that generate it: a transition function from (state, action) to state, and a payoff function from the terminal state to the three payoffs. The solver then recurses over actions, computes each successor state on the fly, and never holds more than one path in memory at a time. That is what "procedural generation" means here, and it is why the solve-time readout is in milliseconds even at four rounds, and why the engine can afford to re-solve the whole game 196 times to draw the sensitivity map.
+
 ## The state model
 
 Let $\ell$ be the US lead, $s$ China's self-sufficiency, $e$ escalation, $m$ TSMC's margin, and $d$ its diversification. The main transitions:
@@ -36,7 +77,7 @@ Let $\ell$ be the US lead, $s$ China's self-sufficiency, $e$ escalation, $m$ TSM
 - **Indigenize**: $s \mathrel{+}= \gamma$. Self-sufficiency rises at the indigenization speed.
 - **Diversify**: $d \mathrel{+}= 0.25$, $m \mathrel{-}= 0.05$. Overseas fabs cost margin and buy insurance. **Concentrate** adds $0.03$ to margin.
 
-Terminal payoffs:
+Loosen lowers the lead by 0.4 and reduces escalation by one; Comply reduces escalation by one half. Terminal payoffs:
 
 $$
 u_{\text{US}} = \ell - c_{\text{US}}\, e^2 - 0.6\, s, \qquad
@@ -48,16 +89,62 @@ Escalation is quadratic for both governments: a little is cheap, a lot is ruinou
 
 ## Reading the equilibrium
 
-With the default parameters and three rounds, the subgame-perfect path has the US tightening in the early rounds and China indigenizing rather than retaliating: retaliation is expensive under quadratic escalation costs, and self-sufficiency is the move that actually changes China's payoff. TSMC diversifies as soon as escalation starts. The round-by-round table shows the state evolving, and the first-round tree shows the rollback values of every opening combination, so you can see by how much the equilibrium move beats the alternatives.
+With the default parameters and three rounds, the subgame-perfect path is Tighten, Indigenize, Diversify in round one; Hold, Indigenize, Diversify in round two; Tighten, Comply, Diversify in round three; with equilibrium payoffs of about 2.16 for the United States, −1.53 for China and 3.31 for TSMC. The pattern is worth reading move by move.
 
-Now raise the indigenization speed $\gamma$. Each round of tightening buys less lead (the $1-s$ factor shrinks) and accelerates the thing that erodes it. At some $\gamma$ the US's rollback value for Tighten drops below Hold and the opening move flips. Raise $c_{\text{US}}$ instead and the same flip happens through the cost of escalation. Lower $c_{\text{CN}}$ and China starts retaliating, which makes tightening less attractive again.
+The United States opens by tightening because China is still highly dependent ($1 - s = 0.8$) and a round of controls buys the most lead it ever will. It holds in round two because a second consecutive tightening would take escalation to two, whose quadratic cost outweighs the smaller lead gain available once China's self-sufficiency has risen. It tightens again in round three because that is the last move and China's best response in the final round is to comply.
+
+China indigenizes in the first two rounds rather than retaliating, and the reason is in the payoff function. Retaliation adds one to escalation, which under $c_{\text{CN}} = 0.4$ costs more than the 0.25 of US lead it removes; indigenization adds $\gamma$ to self-sufficiency, which is worth $3\gamma$ at the end and also shrinks every future US tightening gain through the $(1 - s)$ factor. In the final round the calculus flips: compliance cuts escalation by one half, which lowers the quadratic cost by more than one more step of indigenization would add, and there is no future tightening left to blunt. The final-round compliance is a feature of a game with a known last period, and one to be skeptical of as a description of policy.
+
+TSMC diversifies in every round. With escalation at one or above and $\rho = 0.8$, the risk term on concentrated capacity exceeds the margin saved by staying home. The round-by-round table shows the state evolving and the first-round tree shows the rollback values of every opening combination, so you can see by how much the equilibrium move beats the alternatives.
+
+## How to use the model
+
+Each experiment starts from the defaults.
+
+**Experiment 1: faster indigenization.** Move $\gamma$ from 0.15 to 0.30. The opening move does not change; the United States still tightens in round one. What changes is the back end of the path. China reaches full self-sufficiency by round three, the US loosens in the final round because there is no dependency left to exploit and escalation is now pure cost, and China's equilibrium payoff rises from about −1.53 to about +0.70. TSMC switches to concentrating in all three rounds because escalation never climbs high enough to justify the margin cost of overseas fabs. The lesson is that indigenization speed sets the expiry date on controls rather than their start.
+
+**Experiment 2: a costlier escalation for the United States.** Return $\gamma$ to 0.15 and move $c_{\text{US}}$ from 0.30 to 0.60. The US opens with Tighten, holds in round two and loosens in round three; its payoff falls from about 2.16 to about 1.96, China's rises from negative to positive, and TSMC again stops diversifying. Doubling the escalation cost did not stop the first round of controls. It made the controls temporary.
+
+**Experiment 3: controls that do not work.** Return $c_{\text{US}}$ to 0.30 and lower $\alpha$ from 1.00 toward 0.40. Somewhere between 0.45 and 0.40 the opening move flips to Hold, and at 0.40 the United States holds in every round, escalation stays at zero, China indigenizes anyway, and TSMC concentrates. This is the one slider that changes the first move at the default settings: controls that buy too little lead per round are not worth their escalation cost from the start.
+
+**Experiment 4: the foundry's risk sensitivity.** Move $\rho$ down to 0.45. TSMC concentrates in every round; at 0.50 and above it diversifies in every round. The foundry's decision is a threshold, not a gradient.
 
 ## The sensitivity map
 
-The heatmap re-solves the three-round game at 196 combinations of US escalation cost and indigenization speed, holding the other sliders fixed, and colors each cell by the US opening move. The map has regions, and the regions have boundaries. Near a boundary, a small change in either parameter flips the entire equilibrium path. Far from a boundary, the policy is robust to disagreement about the parameters.
+The heatmap re-solves the three-round game at 196 combinations of US escalation cost and indigenization speed, holding the other sliders fixed, and colors each cell by the US opening move. At the default settings about 88% of the cells open with Tighten and about 12% with Hold; no cell opens with Loosen. The Hold cells are not in a corner. They form a band at indigenization speeds around 0.24 to 0.28, extending across escalation costs above roughly 0.45, with a thinner band near 0.17. Above and below the band the United States tightens even at high escalation costs: at low speeds the lead is cheap to defend; at high speeds China will be self-sufficient soon regardless, so the United States takes what lead it can first. A parameter can move the equilibrium into a region and out again.
 
-This is the useful output. Nobody knows $\gamma$ or $c_{\text{US}}$. But the map tells you which combinations of beliefs lead to which policies, and whether current policy sits in the middle of a region or on an edge.
+The map moves with the other sliders. Lower $\alpha$ to 0.50 and the Hold region roughly triples, spreading to cover most combinations with escalation cost above 0.45 and speeds between 0.17 and 0.40. Nobody knows $\gamma$ or $c_{\text{US}}$. But the map tells you which combinations of beliefs lead to which policies, and whether current policy sits in the middle of a region or on an edge.
+
+## What the record shows
+
+**Tighten, three times.** On October 7, 2022, BIS added advanced computing chips and the equipment to make them to the Commerce Control List, required licenses for items destined to Chinese fabs producing logic at 16 or 14 nanometers and below, DRAM at 18 nanometer half-pitch and below, and NAND at 128 layers and above, and barred US persons from supporting advanced production at those fabs without a license. On October 17, 2023, it added a performance-density parameter designed to pre-empt workarounds, extended licensing to all 22 arms-embargoed countries plus Macau and to firms headquartered there anywhere in the world, and added 13 entities. On December 2, 2024, it added 140 entities, 24 types of semiconductor manufacturing equipment and 3 software tools, and brought high-bandwidth memory under control. Three rounds, each raising escalation by one.
+
+**Indigenize.** In late August 2023 Huawei began selling the Mate 60 Pro, and on September 5, 2023, TechInsights' teardown for Bloomberg confirmed a Kirin 9000s processor made by SMIC on its second-generation 7-nanometer process using multi-patterning deep-ultraviolet lithography rather than the EUV tools China cannot import. TechInsights noted the longer cycle times and probably lower yields of that route, and also that China could expand it for self-sufficiency despite the cost. That is $s$ rising at speed $\gamma$ in the open, under the controls, and it is the single most important datum for the model.
+
+**Retaliate.** On December 3, 2024, the day after the third BIS round, China's commerce ministry banned exports of gallium, germanium, antimony and superhard materials to the United States and tightened end-use review of graphite. On April 4, 2025, a licensing regime took effect on seven rare earth elements and magnets; on October 9, 2025, Beijing announced five more elements effective November 8 plus an extraterritorial rule for foreign products containing Chinese-origin material. Against Nvidia specifically, the Cyberspace Administration summoned the company on July 31, 2025, over alleged backdoors in the H20, and on September 15, 2025, as talks began in Madrid, the antitrust regulator announced a preliminary finding that Nvidia had violated the anti-monopoly law in its Mellanox acquisition. Each is Retaliate: escalation up, US lead down a little, the foundry's margin at risk.
+
+**Loosen, and the cost of escalation made visible.** On April 15, 2025, Nvidia disclosed a charge of about \$5.5 billion after the government told it on April 9 that H20 exports to China required a license and on April 14 that the requirement would hold indefinitely; the H20 had generated an estimated \$12 to 15 billion of revenue in 2024. On May 13, 2025, Commerce rescinded the January 15 AI Diffusion Rule before its May 15 compliance date. On July 14 Nvidia said the government had assured it licenses would be granted, and the Commerce Department began issuing them on August 8 under an arrangement, reported August 11, in which Nvidia and AMD pay 15% of China chip revenue to the US government. On September 29, 2025, BIS issued an affiliates rule extending Entity List restrictions to entities 50% or more owned by listed parties; after the Trump-Xi meeting in Busan on October 30, 2025, that rule was suspended for a year from November 10, the fentanyl tariff on Chinese goods was halved from 20% to 10%, and China suspended its October 9 rare-earth measures and part of the December 2024 mineral ban for a year, while the April 2025 licensing regime stayed in force. On November 5, 2026, BIS extended the stay to January 10, 2027, and on November 9, 2026, China extended its own suspensions to the same date. Those are Loosen and Comply, in sequence, with a short clock.
+
+Read against the model, the path so far is Tighten, Indigenize, Tighten, Indigenize-plus-Retaliate, Tighten, Retaliate, then Loosen and Comply, with TSMC diversifying through the whole sequence. It is closer to Experiment 2 than to the default: an escalation cost that turned out higher than the opening move assumed, and a path that bent toward loosening in the third round.
+
+## What to watch
+
+- **January 10, 2027.** Both the affiliates-rule stay and China's rare-earth and tariff suspensions now expire on the same day. Whether they are extended, allowed to lapse, or traded for something is the next draw in the game.
+- **Indigenization evidence.** Teardowns of Chinese chips, SMIC's reported node progress and yield commentary, and Chinese AI accelerator shipments are direct observations of $\gamma$. Faster progress moves the map toward the band where tightening stops paying.
+- **License flow and revenue-share terms.** The H20 arrangement is a price on Loosen; which chips are licensed, and at what take rate, reveals how the United States weighs lead against escalation cost.
+- **Mineral licensing data.** Approval rates and volumes under the April 2025 rare-earth regime, which was never suspended, are the measure of how much Retaliate remains in force under the truce.
+- **New BIS rules and the foundry's overseas capex.** A fourth round of controls is a Tighten; its absence through the stay period is a Hold. The share of leading-edge capacity committed outside Taiwan is $d$.
 
 ## What this means for investors
 
-The semiconductor supply chain is priced as if export-control policy were a sequence of announcements. It is an equilibrium of a repeated game, and the equilibrium is a function of a handful of parameters that the market can observe moving: how fast China's domestic capability advances, how costly escalation has proven to be, how much margin the foundry gives up abroad. When those parameters move toward a boundary on the map, the policy regime is about to change, and the names exposed to it, equipment makers, foundries, and the hyperscalers that depend on them, will reprice. The tree is large. The number of things to watch is small.
+The semiconductor supply chain is priced as if export-control policy were a sequence of announcements. It is an equilibrium of a repeated game, and the equilibrium is a function of a handful of parameters that the market can observe moving. The exposures differ by instrument.
+
+**Equipment makers.** They sit on the $\alpha$ and $\gamma$ parameters: each Tighten removes Chinese revenue, and each step of indigenization replaces their tools with domestic ones. They lose on both sides of the band, which is why they are the most sensitive names in the map.
+
+**Accelerator designers.** Nvidia and AMD are priced on the Loosen branch. Their China revenue is a function of license policy and the take rate, and the \$5.5 billion charge is a measured example of what one node of the tree costs when the branch flips.
+
+**Foundries.** TSMC's overseas capacity is the Diversify action, a margin cost today for a lower risk term later. The threshold result in Experiment 4 says the market should expect that program to be lumpy rather than gradual.
+
+**Materials.** Rare-earth and gallium producers outside China are long Retaliate. A truce that suspends controls while leaving the April 2025 regime in place is a partial, not a full, reversal of their thesis.
+
+Volatility around rule dates is the one instrument-agnostic observation: the model's flips happen at boundaries, and the calendar now has a boundary on January 10, 2027. When the observable parameters move toward a boundary on the map, the policy regime is about to change, and the names exposed to it will reprice. The tree is large. The number of things to watch is small. This is a structural model for understanding incentives, not a forecast, and nothing here is investment advice.

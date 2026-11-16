@@ -3,10 +3,11 @@ title: "The Winner's Curse at the Treasury Auction"
 date: 2026-10-23
 week: 13
 tags: [Game Theory, Markets]
-summary: "When bidders compete for something whose value is the same for everyone but known to nobody, the winner is the bidder who overestimated it the most. Treasury auctions, spectrum sales, and block trades all have this structure. The simulator is calibrated to the dispersion of bids in the last two years of 10-year note auctions and shows how much a naive bidder loses and how much to shade a bid to break even."
+summary: "When bidders compete for something whose value is the same for everyone but known to nobody, the winner is the bidder who overestimated it the most. Treasury auctions, spectrum sales, and block trades all have this structure. This piece covers common-value auction theory, the Milgrom-Weber equilibrium, how the Treasury's auction format evolved from discriminatory to uniform-price after the 1991 Salomon squeeze, and how to read tails, bid-to-cover ratios and bidder shares. The simulator is calibrated to the dispersion of bids in recent 10-year note auctions and shows how much a naive bidder loses and how much to shade a bid to break even."
 takeaways:
   - "In a common-value auction, winning is bad news: it tells you your signal was the highest of n. Rational bidders shade below their estimate by the expected bias of the top order statistic."
   - "The required shading rises with the number of bidders and with signal noise. More competition means bid less, not more."
+  - "The Treasury moved to uniform-price auctions in 1998 after the 1991 Salomon squeeze and a six-year experiment. Uniform pricing reduces the winner's curse because every winner pays the stop-out, not their own bid."
   - "The gap between an auction's stop-out yield and its median accepted yield is a direct read on bid dispersion, which is the σ of this model. Wider gaps mean a bigger winner's curse and more shading required."
   - "Retail investors face the curse in every competitive process: IPO allocations, block sales, real-estate bidding wars. The cure is the same: condition your valuation on the fact of winning."
 sources:
@@ -14,13 +15,25 @@ sources:
     url: https://www.treasurydirect.gov/auctions/how-auctions-work/
   - title: "TreasuryDirect: auction announcements, data and results"
     url: https://www.treasurydirect.gov/auctions/announcements-data-results/
+  - title: "TreasuryDirect: auction FAQs (bidder categories, 35% limits)"
+    url: https://treasurydirect.gov/help-center/faqs/auction-faqs
   - title: "Milgrom, P. & Weber, R. (1982). A theory of auctions and competitive bidding"
     url: https://www.jstor.org/stable/1911865
   - title: "Thaler, R. (1988). Anomalies: the winner's curse"
     url: https://www.aeaweb.org/articles?id=10.1257/jep.2.1.191
+  - title: "Malvey, P. & Archibald, C. (1998). Uniform-Price Auctions: Update of the U.S. Treasury Experience"
+    url: https://home.treasury.gov/system/files/276/update-of-the-treasury-experience-october-1998.pdf
+  - title: "Hortaçsu, Kastl & Zhang (2018). Bid Shading and Bidder Surplus in the US Treasury Auction System (NBER w24024)"
+    url: https://www.nber.org/papers/w24024
+  - title: "UPI (May 20, 1992): Salomon fined $290 million for trading violations"
+    url: https://www.upi.com/Archives/1992/05/20/Salomon-fined-290-million-for-trading-violations/4151706334400/
+  - title: "Federal Reserve Bank of Cleveland, Economic Commentary (June 1992): the Salomon squeeze and Treasury auction reform"
+    url: https://fraser.stlouisfed.org/files/docs/historical/frbclev/econcomm/econcomm_19920615.pdf
+  - title: "FRED: 10-year Treasury constant maturity yield (DGS10)"
+    url: https://fred.stlouisfed.org/series/DGS10
 ---
 import AuctionSim from '../../components/models/AuctionSim.astro';
-import { auctions, shortDate } from '../../lib/data';
+import { auctions, fred, shortDate } from '../../lib/data';
 
 export const rows = auctions.byTerm('10-Year', 12);
 export const tails = rows.map((a) => Math.round((a.highYield - a.medianYield) * 1000) / 10);
@@ -29,6 +42,23 @@ export const maxTail = Math.max(...tails);
 export const minTail = Math.min(...tails);
 export const latest = rows[0];
 export const sigma = Math.max(0.1, Math.round((meanTail * 8) / 100 * 10) / 10);
+export const btcs = rows.map((a) => a.bidToCoverRatio).filter((x) => x != null);
+export const meanBtc = btcs.reduce((s, x) => s + x, 0) / Math.max(1, btcs.length);
+export const share = (a) => { const pd = a.primaryDealersCompetitiveParAwarded ?? 0, d = a.directBiddersCompetitiveParAwarded ?? 0, i = a.indirectBiddersCompetitiveParAwarded ?? 0; const t = pd + d + i; return t > 0 ? { pd: pd / t, d: d / t, i: i / t } : null; };
+export const shares = rows.map(share).filter((s) => s != null);
+export const meanInd = shares.reduce((s, x) => s + x.i, 0) / Math.max(1, shares.length);
+export const meanPd = shares.reduce((s, x) => s + x.pd, 0) / Math.max(1, shares.length);
+export const latestShare = share(latest);
+export const offerBn = latest.offeringAmount != null ? latest.offeringAmount / 1e9 : null;
+export const bpM = offerBn != null ? offerBn * 1e3 * 0.0008 : null;
+export const quarterM = offerBn != null ? offerBn * 1e3 * 0.0025 : null;
+export const rows2 = auctions.byTerm('2-Year', 12);
+export const meanTail2 = rows2.length ? rows2.reduce((s, a) => s + (a.highYield - a.medianYield) * 100, 0) / rows2.length : null;
+export const rows30 = auctions.byTerm('30-Year', 12);
+export const meanTail30 = rows30.length ? rows30.reduce((s, a) => s + (a.highYield - a.medianYield) * 100, 0) / rows30.length : null;
+export const y10 = fred.latest('DGS10');
+export const pct = (x, d = 0) => `${(100 * x).toFixed(d)}%`;
+export const bp = (x) => (x == null ? 'n/a' : `${x.toFixed(1)} bp`);
 
 ## The setup
 
@@ -36,19 +66,13 @@ An object has a true value $V$ that is the same for every bidder. Nobody knows $
 
 <AuctionSim id="auction" />
 
-## Calibrating σ to real auctions
+## Private values, common values, and the linkage principle
 
-Nobody publishes the dispersion of dealers' private estimates, but the Treasury publishes the next best thing after every auction: the high yield (the stop-out, where the last accepted bid landed), the median accepted yield, and the low yield. The gap between high and median is how far the marginal winner's bid sat above the middle of the accepted crowd, in yield. Over the last {rows.length} 10-year note auctions that gap averaged {meanTail.toFixed(1)} basis points, ranging from {minTail.toFixed(1)} to {maxTail.toFixed(1)}; the most recent auction, on {shortDate(latest.auctionDate)}, stopped at {latest.highYield.toFixed(3)}% with a median of {latest.medianYield.toFixed(3)}%.
+Auction theory divides the world by what bidders are uncertain about. In a private-value auction each bidder knows what the object is worth to them and is uncertain only about the others; a painting you want for your wall is the standard example. In a common-value auction the object is worth the same to everyone, and the uncertainty is about that common number; an oil lease, a spectrum license, and a Treasury note are the standard examples. Most real auctions are affiliated: your estimate and mine are correlated because we are both looking at the same thing.
 
-A 10-year note has a modified duration near 8, so one basis point of yield is about 0.08 points of price per $100 face. The simulator's default σ is therefore
+Milgrom and Weber's 1982 paper is the foundation for the affiliated case. Its two results that matter here are the winner's curse and the linkage principle. The curse: in a common-value auction, a bidder who wins learns that every other bidder's estimate was lower, and a rational bidder accounts for that before bidding, by bidding the expected value of the object conditional on having the highest signal rather than the unconditional expectation. The linkage principle: the more the price a winner pays is linked to information other than the winner's own, the less the curse bites and the more the seller earns. An ascending auction, where bidders see each other drop out, reveals more than a sealed-bid auction; a uniform-price auction, where every winner pays the marginal price, links the payment to the crowd's valuation rather than the winner's. That is the theoretical case for the format the Treasury now uses.
 
-$$
-\sigma \approx \frac{\operatorname{mean}(y_{\text{high}} - y_{\text{median}}) \times 8}{100}
-$$
-
-which comes to {sigma.toFixed(1)} price points on the current data.
-
-That is the scale of disagreement among bidders who all have Bloomberg terminals and the same when-issued quote in front of them. It is small in price terms and large in money terms: a quarter point on a $42 billion auction is about $100 million of value moving between winners and losers.
+Thaler's 1988 survey documents that real bidders systematically fail to make the adjustment: oil companies in the 1960s and 1970s Gulf of Mexico lease sales, the free agents in baseball, the acquirers in corporate takeovers. The curse is not a theoretical curiosity. It is a reliable transfer from winners to sellers.
 
 ## The curse in one line
 
@@ -66,10 +90,56 @@ Each bidder bids $x_i - k\sigma$. With every bidder shading identically, the hig
 
 The simulator exposes two parameters to drag. Raise $n$ and the required shading climbs; counterintuitively, more competitors should make you bid *less*. Raise $\sigma$ and it climbs faster: the noisier everyone's estimates, the more the winner's estimate overshoots.
 
+## How a Treasury auction actually works
+
+The Treasury announces the size and terms of an issue, usually a week ahead. A when-issued market opens immediately, in which dealers trade the note for delivery on the issue date, so by auction day there is a public forward price. Bids are due at 1:00 pm Eastern on auction day. Noncompetitive bidders, mostly individuals through TreasuryDirect, state a quantity and accept whatever yield the auction sets, up to \$10 million per bidder. Competitive bidders state a quantity and a yield. The Treasury fills noncompetitive bids first, then accepts competitive bids from the lowest yield upward until the issue is sold. The yield at which the last bid is accepted is the high yield, or stop-out, and in a uniform-price auction every accepted bidder, competitive and noncompetitive, receives that yield. Bids at exactly the stop-out are prorated; the "allotted at high" percentage in the results tells you how much. No single bidder may bid for or be awarded more than 35% of the offering, net of its when-issued position.
+
+Results are published within minutes and carry three statistics that matter for this model. The bid-to-cover ratio is total bids tendered divided by the amount sold; it is a proxy for the number of serious bidders $n$. The median and low accepted yields, alongside the high, describe the distribution of accepted bids; the gap between high and median is a read on $\sigma$. And the allocation across primary dealers, direct bidders (institutions bidding for their own account outside the dealer system) and indirect bidders (customers bidding through a dealer, including foreign central banks through the New York Fed) says who ended up holding the paper. Dealers are the residual buyers: when real-money demand is weak, their share rises and they carry inventory they did not want at a price they set.
+
+## From discriminatory to uniform price: the 1991 squeeze and the 1998 switch
+
+Until the 1990s the Treasury ran discriminatory, or pay-as-bid, auctions: each winning competitive bidder paid the price it bid. That format maximizes the winner's curse, because a bidder who misjudges the market pays for the misjudgment in full, and it rewards dealers who can see customer order flow and shade around it.
+
+In 1991 Salomon Brothers was found to have submitted unauthorized bids in customers' names across a series of auctions, and in the May 22, 1991 two-year note auction to have controlled more than 90% of the issue, far beyond the 35% limit, cornering the when-issued market and squeezing short dealers who had to deliver. The firm paid \$290 million in penalties and restitution in May 1992, its chairman resigned, and the Treasury, the Fed and the SEC produced a joint report on the government securities market that recommended, among other reforms, a trial of uniform-price auctions. The Treasury announced the experiment for two- and five-year notes in September 1992.
+
+Malvey and Archibald's 1998 review of the experiment found that uniform-price auctions produced slightly higher revenue on average, though not statistically significantly so, broadened participation and reduced the concentration of awards. The Treasury switched all auctions to the uniform-price format in November 1998, and that remains the format today. The theoretical reason it works is the linkage principle: because every winner pays the stop-out, a bidder's own aggressiveness does not set their own price, so the penalty for overestimating is smaller and bidders can bid closer to their true estimates. Hortaçsu, Kastl and Zhang, using the Treasury's bid-level data from 2009 to 2013, estimate that bidders still shade, that primary dealers shade the most despite having the highest willingness to pay, and that total bidder surplus averages about three basis points of yield, with efficiency losses near two. Three basis points on a few trillion dollars a year of issuance is the price the Treasury pays for the curse.
+
+## Calibrating σ to real auctions
+
+Nobody publishes the dispersion of dealers' private estimates, but the Treasury publishes the next best thing after every auction: the high yield (the stop-out, where the last accepted bid landed), the median accepted yield, and the low yield. The gap between high and median is how far the marginal winner's bid sat above the middle of the accepted crowd, in yield. Over the last {rows.length} 10-year note auctions that gap averaged {meanTail.toFixed(1)} basis points, ranging from {minTail.toFixed(1)} to {maxTail.toFixed(1)}; the most recent auction, on {shortDate(latest.auctionDate)}, stopped at {latest.highYield.toFixed(3)}% with a median of {latest.medianYield.toFixed(3)}%. For comparison, the same gap averaged {bp(meanTail2)} over the last {rows2.length} two-year auctions and {bp(meanTail30)} over the last {rows30.length} thirty-year auctions. Compare them in price, not yield: a basis point on a thirty-year bond is roughly twice the price of a basis point on a ten-year and eight times that on a two-year, so similar yield gaps mean very different dispersion in dollars.
+
+A 10-year note has a modified duration near 8, so one basis point of yield is about 0.08 points of price per \$100 face. The simulator's default σ is therefore
+
+$$
+\sigma \approx \frac{\operatorname{mean}(y_{\text{high}} - y_{\text{median}}) \times 8}{100}
+$$
+
+which comes to {sigma.toFixed(1)} price points on the current data.
+
+That is the scale of disagreement among bidders who all have Bloomberg terminals and the same when-issued quote in front of them. It is small in price terms and large in money terms: {offerBn != null ? `on the most recent ${offerBn.toFixed(0)} billion dollar offering, one basis point of yield is about $${bpM.toFixed(0)} million of value and a quarter point of price about $${quarterM.toFixed(0)} million` : 'on a typical offering, a quarter point of price is on the order of a hundred million dollars'} moving between winners and losers.
+
 ## Reading auction results
 
-Treasury auction statistics are a read on this game, and the table under the simulator shows the last {rows.length} of them. Dealers quote the **tail** as the stop-out yield minus the when-issued yield at the deadline; the Treasury does not publish the when-issued level, so the table uses the stop-out minus the median accepted yield, which measures the same dispersion from inside the auction. A wide gap means the marginal winner bid well away from the crowd, which is to say someone shaded less than everyone else. The **bid-to-cover** ratio is a proxy for $n$; the dealer, direct and indirect award shares show who ended up owning the notes. Rising bid-to-cover with persistent dispersion is a market that has learned to shade; rising bid-to-cover with narrowing dispersion is a market that is about to learn.
+Treasury auction statistics are a read on this game, and the table under the simulator shows the last {rows.length} of them. Dealers quote the **tail** as the stop-out yield minus the when-issued yield at the deadline; the Treasury does not publish the when-issued level, so the table uses the stop-out minus the median accepted yield, which measures the same dispersion from inside the auction. A wide gap means the marginal winner bid well away from the crowd, which is to say someone shaded less than everyone else. An auction that stops below the when-issued yield is said to "stop through" and is read as strong; one that stops above it "tails" and is read as weak, and a tail of more than a couple of basis points on a 10-year is a headline.
+
+The **bid-to-cover** ratio is a proxy for $n$. It averaged {meanBtc.toFixed(2)} across these {btcs.length} auctions and was {latest.bidToCoverRatio != null ? latest.bidToCoverRatio.toFixed(2) : 'not reported'} at the latest. The **indirect** share is read as the real-money and foreign-official bid; it averaged {pct(meanInd)} of competitive awards across the sample{latestShare ? ` and was ${pct(latestShare.i)} at the latest auction, with primary dealers taking ${pct(latestShare.pd)} and direct bidders ${pct(latestShare.d)}` : ''}. Dealers averaged {pct(meanPd)}. A rising dealer share is the market telling you that the people who had to bid were the only people bidding. Rising bid-to-cover with persistent dispersion is a market that has learned to shade; rising bid-to-cover with narrowing dispersion is a market that is about to learn. The latest stop-out of {latest.highYield.toFixed(3)}% sits against a 10-year constant-maturity yield of {y10.toFixed(2)}% on {shortDate(fred.asOf('DGS10'))}; the difference is mostly the days between the two dates and the on-the-run premium, not the auction.
+
+## How to use the model
+
+Three experiments.
+
+First, set $n$ to 6 and $\sigma$ to the calibrated default, read the break-even shading in basis points, and compare it with the mean tail in the table. If the two are close, the market is shading about as the theory says it should. Then raise $n$ to 20, which is closer to the number of primary dealers plus large directs. The required shading rises by roughly half a sigma. That increment is what a bidder gives up by treating a crowded auction like a thin one.
+
+Second, hold $n$ fixed and double $\sigma$. This is a volatile day: a CPI print that morning, or a Fed meeting the same week. The required shading doubles with it, and the simulated profit of a naive bidder goes from a small loss to a large one. The auctions in the table with the widest high-minus-median gaps are usually those days, and the lesson is that the time to bid cautiously is exactly when the when-issued market is moving.
+
+Third, set shading to zero and run the simulation many times, reading the distribution of the winner's profit. The mean is negative by construction, but the spread is the more useful number: it is the range of outcomes a bidder who ignores the curse should expect, and it is wider than the mean loss. The curse is a bias; the dispersion around it is the risk.
+
+## What to watch
+
+Three indicators from each month's coupon auctions. The tail, measured against the when-issued yield in the dealer commentary or against the median in the table here; two or more basis points on a 10-year or 30-year is a weak auction and often moves the secondary market for the rest of the day. The indirect share, as a read on foreign and real-money demand for US duration; a falling trend across several auctions, with dealers absorbing the difference, is the signal that the marginal buyer has changed. And the bid-to-cover, read together with the tail: a high ratio with a wide tail means many bidders who all shaded, which is a market that has priced the curse, while a falling ratio with a widening tail is the combination that precedes the auctions people remember.
 
 ## What this means for investors
 
 Any time you win a competitive process, ask what winning tells you. Your valuation was the highest in the room. Unless you had better information than the room, the room's average was closer to right than you were. The correction is not to stop bidding. It is to bid as if you will win, which means bidding on the value conditional on your estimate being the maximum, and that is always lower than your estimate.
+
+By instrument, and for education rather than advice. For an individual buying Treasuries at auction through TreasuryDirect, the noncompetitive bid is the one that sidesteps the curse entirely: you receive the stop-out yield that the competitive crowd set, with none of the shading problem, and the uniform-price format means you are not disadvantaged relative to dealers for having bid blind. For holders of Treasury ETFs and bond funds, the auction statistics are a leading indicator: a run of weak long-end auctions tends to show up in the fund's price before it shows up in the news. For anyone bidding in an IPO book, a block sale, or a house, the structure is identical and the format is usually discriminatory, which is the worst case; the discipline is to write down your estimate before the process starts, shade it by an amount that rises with the number of other bidders, and not revise it upward because someone else bid more.

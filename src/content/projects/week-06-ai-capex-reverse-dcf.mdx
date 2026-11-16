@@ -3,12 +3,13 @@ title: "What Does the Market Believe About AI Capex? A Reverse DCF"
 date: 2026-09-04
 week: 6
 tags: [Firms, CFA, Markets]
-summary: "Hyperscalers are spending at a rate that makes capex intensity the single most important input in their valuation. A multi-stage free-cash-flow model, loaded with the filed financials and market prices of Microsoft, Alphabet, Amazon, Meta, Nvidia and Oracle, shows why: the sales-to-capital ratio decides whether growth creates or destroys value. Run it forward, then run it backward to see what growth the price already assumes."
+summary: "The four largest hyperscalers spent more than $416 billion on capital expenditure in 2025 and have guided to roughly $720 to $745 billion for 2026. That makes capex intensity the single most important input in their valuation. A multi-stage free-cash-flow model, loaded with the filed financials and market prices of Microsoft, Alphabet, Amazon, Meta, Nvidia and Oracle, shows why: the sales-to-capital ratio decides whether growth creates or destroys value. Run it forward, then run it backward to see what growth the price already assumes."
 takeaways:
-  - "Growth only adds value when return on invested capital exceeds the cost of capital. Capex intensity (sales-to-capital) is where that condition lives in the model."
-  - "Terminal value is usually two thirds or more of enterprise value. A valuation is a bet on the terminal assumptions far more than on the next five years."
+  - "Growth only adds value when return on invested capital exceeds the cost of capital. Capex intensity (sales-to-capital) is where that condition lives in the model, and ROIC = margin × (1 − t) × sales-to-capital is the identity that links them."
+  - "FCFF is discounted at WACC and belongs to all capital providers; FCFE is discounted at the cost of equity. For net-cash hyperscalers the two give the same answer, but only if net debt is subtracted once and the discount rate matches the cash flow."
+  - "Terminal value is usually two thirds or more of enterprise value, and the terminal reinvestment rate must equal g / ROIC. A terminal value that assumes growth with no reinvestment is the most common error in a DCF."
   - "Reverse the model: solve for the growth rate the price implies. If the implied growth needs a decade of acceleration, you are not buying a forecast, you are buying a narrative."
-  - "Watch the gap between stage-1 growth and the fade. The fade is where most models hide their optimism."
+  - "Hyperscaler 2026 capex guidance was raised repeatedly through 2026 (Alphabet to $195–205 billion, Amazon to about $220 billion, Meta to $130–145 billion), and two of the four reported negative free cash flow in the third quarter. Every one of those headlines is a change to the sales-to-capital slider."
 sources:
   - title: "CFA Institute: Free Cash Flow Valuation (Level II equity reading)"
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/free-cash-flow-valuation
@@ -18,6 +19,20 @@ sources:
     url: https://www.sec.gov/edgar/search/
   - title: "FRED: 10-year Treasury constant maturity (DGS10) and ICE BofA US Corporate OAS (BAMLC0A0CM)"
     url: https://fred.stlouisfed.org/series/DGS10
+  - title: "Platformonomics: Follow the CAPEX, 2025 retrospective (Feb 25, 2026)"
+    url: https://platformonomics.com/?p=34926
+  - title: "Tom's Hardware: Google, Microsoft, Meta and Amazon capex to hit $725 billion in 2026, up 77% (FT compilation of Q1 2026 guidance)"
+    url: https://www.tomshardware.com/tech-industry/big-tech/big-techs-ai-spending-plans-reach-725-billion
+  - title: "The Star / Reuters: Google increases capex forecast again after cloud-driven quarterly beat (Jul 23, 2026)"
+    url: https://www.thestar.com.my/tech/tech-news/2026/07/23/google-increases-capex-forecast-again-after-cloud-driven-earnings-beat
+  - title: "EffectStory: Hyperscaler AI capex, Q3 2026 actuals and full-year guidance (Oct 30, 2026)"
+    url: https://effectstory.com/en/articles/hyperscaler-ai-capex-q2-2026-microsoft-alphabet-meta-amazon
+  - title: "CFO Dive: Microsoft holds the line on AI spending plans (useful-life change and calendar-2026 capex)"
+    url: https://www.cfodive.com/news/microsoft-holds-line-ai-spending-plans/826648/
+  - title: "TechRepublic: Oracle seeks $50 billion in 2026 to fund AI cloud growth"
+    url: https://www.techrepublic.com/de/article/news-oracle-50b-ai-cloud/
+  - title: "NVIDIA: Financial results for fourth quarter and fiscal 2026 (Feb 25, 2026)"
+    url: https://www.storagenewsletter.com/2026/03/04/nvidia-fiscal-4q26-and-fy26-financial-results/
 ---
 import DcfModel from '../../components/models/DcfModel.astro';
 import { companies, companySnapshot, waccFor, fred, shortDate } from '../../lib/data';
@@ -28,10 +43,19 @@ export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
 export const bn = (x) => `$${(x / 1e9).toFixed(x < 10e9 ? 1 : 0)}B`;
 export const totalCapex = snaps.reduce((a, x) => a + x.s.capexTTM, 0);
 export const roic = msft.s.ebitMargin * (1 - msft.s.taxRate) * msft.s.salesToCapital;
+export const totalRev = snaps.reduce((a, x) => a + x.s.revenueTTM, 0);
+export const byIntensity = [...snaps].sort((a, b) => b.s.capexTTM / b.s.revenueTTM - a.s.capexTTM / a.s.revenueTTM);
+export const heaviest = byIntensity[0];
+export const lightest = byIntensity[byIntensity.length - 1];
+export const nvda = snaps.find((x) => x.s.ticker === 'NVDA') ?? snaps[0];
+export const igOasBp = Math.round(100 * fred.latest('BAMLC0A0CM'));
+export const msftReinv = msft.s.revenueGrowth / roic;
+export const waccLo = Math.min(...snaps.map((x) => x.w.wacc));
+export const waccHi = Math.max(...snaps.map((x) => x.w.wacc));
 
 ## The setup
 
-The AI build-out is the largest private capital-spending program in the history of the technology sector. Over their latest trailing twelve months, the six companies below reported {bn(totalCapex)} of capital expenditure between them. They are valued as if that capital will earn a return well above its cost. Whether it does is the entire question, and a free-cash-flow model is the honest way to ask it.
+The AI build-out is the largest private capital-spending program in the history of the technology sector. Over their latest trailing twelve months, the six companies below reported {bn(totalCapex)} of capital expenditure between them, against {bn(totalRev)} of revenue, a group capex intensity of {pct(totalCapex / totalRev)}. They are valued as if that capital will earn a return well above its cost. Whether it does is the entire question, and a free-cash-flow model is the honest way to ask it.
 
 The Level II curriculum defines free cash flow to the firm as
 
@@ -44,6 +68,20 @@ The model below rolls depreciation into the margin and collapses the last two te
 Every slider starts at the company's own numbers: trailing-twelve-month revenue, operating margin and effective tax rate from its filings, revenue growth over the latest fiscal year, net debt and share count from the latest balance sheet, the current share price, and a WACC built from the 10-year Treasury ({pct(fred.latest('DGS10') / 100, 2)} on {shortDate(fred.asOf('DGS10'))}), the company's one-year beta against the S&P 500, a 4.5% equity risk premium, and the investment-grade index spread for the cost of debt.
 
 <DcfModel id="hyperscaler" company="MSFT" />
+
+## FCFF, FCFE, and which discount rate
+
+A candidate needs two cash-flow definitions and must never mix them. Free cash flow to the firm is the cash available to all capital providers after operating taxes and reinvestment. Free cash flow to equity is what is left for shareholders after debt holders have been paid and after net borrowing:
+
+$$
+\text{FCFE}_t = \text{FCFF}_t - \text{Int}_t(1-\tau) + \text{Net borrowing}_t
+$$
+
+FCFF is discounted at the weighted-average cost of capital, because it belongs to the whole capital structure. FCFE is discounted at the cost of equity. Discounting FCFF at the cost of equity undervalues the firm; discounting FCFE at WACC overvalues it. Both paths reach the same equity value when the leverage assumptions are consistent, and the firm approach is the one the model uses: it values the enterprise, subtracts net debt once, and divides by shares.
+
+For this group the distinction is nearly academic. Most hyperscalers carry little net debt relative to market capitalization, so the model's WACC sits close to the cost of equity: across the six names it runs from {pct(waccLo, 2)} to {pct(waccHi, 2)}, and the spread comes from beta, not leverage. Cost of debt is the 10-year Treasury plus the investment-grade index OAS, {igOasBp} basis points on {shortDate(fred.asOf('BAMLC0A0CM'))}.
+
+One other convention: taxes are applied to EBIT, not pretax income, because the interest tax shield already sits in the after-tax cost of debt. Counting it in the cash flow too is double counting.
 
 ## The six balance sheets
 
@@ -63,6 +101,8 @@ Every slider starts at the company's own numbers: trailing-twelve-month revenue,
 
 Sales-to-capital here is the incremental revenue of the latest fiscal year divided by that year's reinvestment (capex less depreciation, plus the working-capital build). It is noisy by construction: a company whose depreciation nearly matches its capex has a tiny denominator and an unstable ratio, and the model says so when it has to clamp one. The sign of the noise is the point. Capex that is not yet producing revenue drags the ratio down this year and, if the capacity sells, pushes it up later. The dial you are turning is a bet on that timing.
 
+The table shows how wide the range is even inside one sector. {heaviest.s.name} is spending {pct(heaviest.s.capexTTM / heaviest.s.revenueTTM)} of trailing revenue on capital equipment; {lightest.s.name} is spending {pct(lightest.s.capexTTM / lightest.s.revenueTTM)}. {nvda.s.name}, which sells the equipment rather than installing it, has an EBIT margin of {pct(nvda.s.ebitMargin)} and a reinvestment need that is a fraction of its customers'. It is the same capex seen from the other side of the invoice.
+
 ## How the pieces fit
 
 Stage 1 runs five years at the growth rate you set. Stage 2 fades linearly to the terminal rate over the number of years you choose. Each year's reinvestment is $\Delta\text{Revenue} / \text{S2C}$. The terminal value is a Gordon growth value on the first post-fade cash flow, with the reinvestment rate set to the level consistent with steady-state growth:
@@ -73,6 +113,20 @@ $$
 
 That last identity is the hinge. If ROIC falls below WACC, every dollar of growth reduces value. On Microsoft's figures (a {pct(msft.s.ebitMargin)} operating margin, a {pct(msft.s.taxRate)} tax rate, and a sales-to-capital ratio of {msft.s.salesToCapital.toFixed(2)}×) the implied ROIC on new capital is {pct(roic)}, against a WACC of {pct(msft.w.wacc, 2)}. Drag the sales-to-capital slider down until ROIC crosses WACC and you will watch the per-share value fall as you *raise* the growth rate. That is the arithmetic of value-destroying growth, and it is the risk the market is pricing when it reacts to a capex guidance raise.
 
+## Terminal value and the consistency condition
+
+The terminal value is where most of the money is. With the first post-fade cash flow $\text{FCFF}_{n+1}$,
+
+$$
+\text{TV}_n = \frac{\text{FCFF}_{n+1}}{\text{WACC} - g}, \qquad \text{FCFF}_{n+1} = \text{NOPAT}_{n+1}\left(1 - \frac{g}{\text{ROIC}}\right)
+$$
+
+Three rules follow, and the exam tests all of them. First, $g$ must be below the discount rate and, in practice, no higher than nominal economic growth; the risk-free rate is the usual ceiling. Second, terminal growth has to be paid for: a firm growing at $g$ forever with a return on new capital of ROIC must reinvest $g/\text{ROIC}$ of its after-tax operating income every year. Setting terminal reinvestment to zero while keeping $g$ positive is the most common DCF error, and it inflates the terminal value by exactly $1/(1 - g/\text{ROIC})$. Third, the ROIC in that fraction should be the steady-state return. A business earning high returns in a contested market should have its terminal ROIC faded toward WACC; a business with durable moats can hold a spread.
+
+On Microsoft's current inputs, sustaining its latest fiscal-year growth of {pct(msft.s.revenueGrowth)} forever at the model's ROIC of {pct(roic)} would require a reinvestment rate of {pct(msftReinv)} of after-tax operating income. If the terminal growth slider is at a sensible 2.5% to 3.5%, the required reinvestment is far lower, which is why the terminal cash flow is larger than the last stage-2 cash flow in the table. That jump is not a free lunch. It is the model saying that a mature company stops building and starts harvesting, and the whole investment case rests on the harvest arriving.
+
+The model shows terminal value as a share of enterprise value. For long-duration growth companies it is routinely two thirds or more: the next five years, which analysts argue over, are the minority of the value.
+
 ## The sensitivity grid
 
 The table shows value per share across WACC and terminal growth. The spread between the top-left and bottom-right cells is typically several multiples of the central value. That is not a flaw in the model. It is the correct statement of how uncertain a long-duration asset's value is, and why these stocks move so much on a 25-basis-point change in the discount rate.
@@ -81,6 +135,48 @@ The table shows value per share across WACC and terminal growth. The spread betw
 
 Instead of guessing growth and computing a value, fix the value at the market price and solve for growth. The model does this by bisection on the stage-1 growth rate. The output is the growth the market is already paying for at today's price. Compare it with the growth the company actually delivered in its latest fiscal year, which sits on the growth slider when the page loads. If the implied number is higher than any historical five-year run for a company this size, you have learned something: the price embeds a forecast nobody has achieved. If it is lower than the company's current growth, the market may be pricing a capex-driven collapse in ROIC rather than a slowdown in revenue.
 
+The reverse DCF has a discipline the forward version lacks. A forward DCF lets the analyst pick ten inputs and reach any answer. A reverse DCF fixes the answer and asks what must be true for it to hold, conditional on the other sliders. Lower the sales-to-capital ratio to reflect a heavier build and the implied growth rises, because more revenue is needed to pay for the same price. Raise the margin and it falls. The market price is one number; the set of inputs that justify it is a surface.
+
+## The capex debate, in numbers
+
+The forward numbers are the reason this model exists. According to the Platformonomics tally of filed results, Amazon, Microsoft, Alphabet and Meta spent more than \$416 billion on capital expenditure in calendar 2025 including finance-lease infrastructure, up 66% from about \$251 billion in 2024: Amazon \$134.7 billion, Microsoft \$118 billion, Alphabet \$91.5 billion and Meta \$72.2 billion. A Financial Times compilation of first-quarter 2026 guidance, reported by Tom's Hardware, put the four companies' 2026 plans at about \$725 billion, 77% above 2025.
+
+The guidance then kept moving. On its July 22, 2026 call Alphabet raised its 2026 range to \$195 to \$205 billion from \$180 to \$190 billion and said 2027 would rise significantly again; its cloud backlog reached \$514 billion. Amazon lifted its 2026 figure to about \$220 billion. Meta narrowed to \$130 to \$145 billion and then, in October, to \$135 to \$145 billion. Microsoft's calendar-2026 figure moved to roughly \$175 billion from an earlier \$190 billion, but the change was an accounting one: a longer depreciable life for data-center assets and a reclassification of some leases, not less spending. Oracle, the smallest of the six, guided fiscal 2026 capex to \$50 billion, up \$15 billion from its prior plan, and financed it with a \$25 billion bond sale in February 2026. By the October 2026 reporting round, Alphabet's third-quarter capex was \$51.4 billion and Amazon's \$77.3 billion, and both reported negative free cash flow for the quarter (Alphabet about −\$9.1 billion; Amazon's trailing-twelve-month free cash flow was an outflow of about \$42 billion).
+
+The demand side of the same transaction shows up in one company's income statement. Nvidia reported fiscal 2026 revenue of \$215.9 billion, up 65%, with data-center revenue of about \$193.7 billion. Set against the big four's \$416 billion of 2025 capex, that is the single largest line in the bill, earned at a 71% gross margin.
+
+Three things in those numbers matter for the model. First, useful lives: Microsoft and others have lengthened the depreciable life of data-center equipment, which lowers reported depreciation and flatters the EBIT margin; the margin slider absorbs that choice, but the cash is spent regardless. Second, financing: when capex exceeds operating cash flow the gap is funded with debt, and the net-debt slider stops being a rounding error. Meta has said it will fund investment with operating cash flow, investment-grade debt, partnerships and equity; Oracle has become one of the largest corporate bond issuers in the market. Third, revision: guidance has been raised repeatedly through 2026. In the model's terms, the market keeps learning that the sales-to-capital ratio is lower than it thought, and then has to decide whether the extra capital earns its keep later.
+
+## How to use the model
+
+Three experiments make the page worth more than the headline.
+
+**Find the break-even sales-to-capital ratio.** Load Microsoft. Leave growth and margin alone. Drag the sales-to-capital slider down slowly and watch the ROIC readout. When ROIC falls to WACC, the value per share stops responding to growth: raising the growth slider no longer helps. Below that point, raising growth lowers value. The ratio at which that happens is the capex intensity at which the AI build-out becomes value-neutral, and comparing it with the company's current ratio tells you how much room there is.
+
+**Price the fade.** Set stage-1 growth at the company's current rate and the fade at three years, note the value per share, then set the fade to ten years. The difference is the value of seven extra years of above-trend growth, and it is usually a large fraction of the price. Then look at the terminal share of enterprise value in both cases. The longer fade should lower it, because more of the value is pulled into the explicit forecast. If the terminal share barely moves, growth in the extra fade years is being paid for with too much reinvestment to matter.
+
+**Run the reverse DCF across the group.** Switch companies and read the implied stage-1 growth at the market price without touching the other sliders. The dispersion is the market's ranking of who converts capex to revenue. Then set every company's sales-to-capital ratio to the same figure, say 1.0×, and read the implied growth again. The names whose implied growth jumps most are the ones whose valuation most depends on a capex efficiency the market is currently granting them.
+
+## What to watch
+
+The model's inputs map onto a short list of indicators.
+
+- **Capex guidance versus cloud and advertising revenue growth.** The sales-to-capital ratio is the ratio of those two growth rates, one year lagged. Guidance rising faster than revenue is the ratio falling.
+- **Depreciation policy changes.** Any extension of useful lives shows up as margin. Compare EBIT margin with EBITDA less cash capex margin; divergence is the accounting doing the work.
+- **Free cash flow and net issuance.** Negative free cash flow is not a problem if ROIC on the new capital is high, and a serious one if it is not. Watch the debt tab: bond deals, lease structures, and off-balance-sheet data-center financing all move the net-debt slider.
+- **Backlog and remaining performance obligations.** Contracted cloud backlog is the closest thing to a forward revenue line for the capital being installed; its growth relative to capex is a live read on sales-to-capital.
+- **The 10-year yield.** The WACC slider starts from {pct(fred.latest('DGS10') / 100, 2)}; the sensitivity grid quantifies how steep the value is in that number.
+- **Nvidia's data-center revenue.** The supplier's view of the same capital, reported a quarter ahead of the customers' depreciation.
+
 ## What this means for investors
 
 Hold the model's two most sensitive inputs in your head: sales-to-capital and the fade. Every AI capex headline is a change to the first. Every "margin expansion story" is a claim about the second. Translating headlines into those two numbers, and then into value per share, is what separates a valuation from a vibe. The figures on this page refresh with each build from the companies' filings and closing prices, so the implied growth you see is the market's current bet, not a historical one.
+
+By instrument, and for education rather than advice:
+
+- **Hyperscaler equity.** If the implied growth at the market price is above what the company has ever delivered over five years, the position is a bet on acceleration and should be sized as one. A capex raise is bad news only if it lowers the believed sales-to-capital ratio; a raise alongside a larger backlog may not be.
+- **Semiconductor and infrastructure suppliers.** Their revenue is the hyperscalers' capex. The risk is the fade, not the level: the moment guidance stops rising, a supplier's growth goes to zero while the customers' spending stays record-high.
+- **Investment-grade bonds of the issuers.** Negative free cash flow is new supply. If capex keeps outrunning operating cash flow, the credit story changes before the equity story does.
+- **Index funds.** These six companies are a large share of the S&P 500. An index holder owns this valuation question whether or not they have an opinion on it.
+
+At the current price, the market is assuming that hundreds of billions of dollars of data-center capital will earn a return comfortably above its cost. The sales-to-capital slider is where that assumption can be tested against the filings, one quarter at a time.

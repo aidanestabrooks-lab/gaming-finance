@@ -3,20 +3,39 @@ title: "The Yen Carry Trade: Pricing the Unwind"
 date: 2026-11-06
 week: 15
 tags: [CFA, Geopolitics, Markets]
-summary: "Borrow in a low-rate currency, invest in a high-rate one, and collect the difference until the day everyone exits at once. Covered interest parity says the hedged version of the trade earns nothing, so the carry is payment for bearing a distribution with a very bad left tail. The simulator builds that distribution from the live USD/JPY spot, the actual BoJ and SOFR rates, realized volatility, and a jump process calibrated to the yen's own three-sigma days, and reports VaR, expected shortfall, and the probability of a margin call."
+summary: "Borrow in a low-rate currency, invest in a high-rate one, and collect the difference until the day everyone exits at once. Covered interest parity says the hedged version of the trade earns nothing, so the carry is payment for bearing a distribution with a very bad left tail. This piece covers covered and uncovered interest parity, carry as a risk premium, the Bank of Japan's path from negative rates to normalization, the August 2024 unwind in sourced numbers, and the CFTC positioning data that tells you how crowded the trade is. The simulator builds the return distribution from the live USD/JPY spot, the actual BoJ and SOFR rates, realized volatility, and a jump process calibrated to the yen's own three-sigma days, and reports VaR, expected shortfall, and the probability of a margin call."
 takeaways:
   - "Under covered interest parity the forward discount equals the rate differential, so hedged carry is zero. Unhedged carry is a bet that the spot rate will not move as much as the forward implies."
-  - "Carry returns are negatively skewed with fat tails: many small gains and occasional large losses. A normal-distribution VaR understates the risk by a wide margin."
-  - "Leverage turns a 10% spot move into a wiped-out account. The probability of a margin call is the risk metric that matters, and it rises nonlinearly with leverage."
-  - "Crowded positioning is the unwind mechanism. Everyone's stop sits at a similar level, and the first forced seller moves the price to the next stop."
+  - "Uncovered interest parity fails on average: high-rate currencies do not depreciate enough to erase the carry. The compensation is a risk premium, and the risk is crash risk: carry returns are negatively skewed with fat tails."
+  - "The August 2024 unwind followed a BoJ hike and a weak US payrolls print. The Nikkei fell 12.4% in a day and the yen rallied against positions the BIS put at roughly 250 billion dollars. Leverage, not the size of the spot move, is what turned it into forced selling."
+  - "Crowded positioning is the unwind mechanism, and it is observable: CFTC futures positioning in the yen hit its most extreme short since 2007 in spring 2024 and flipped to net long within weeks of the crash."
+  - "Size a carry position on the probability of a margin call, not the Sharpe ratio. It rises nonlinearly with leverage while the mean return barely moves."
 sources:
   - title: "CFA Institute: Currency Management (Level III)"
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/currency-management-introduction
-  - title: "Bank for International Settlements: Quarterly Review, the August 2024 market turbulence"
+  - title: "BIS Bulletin No 90 (August 2024): The market turbulence and carry trade unwind of August 2024"
+    url: https://www.bis.org/publ/bisbull90.htm
+  - title: "Bank for International Settlements: Quarterly Review, September 2024"
     url: https://www.bis.org/publ/qtrpdf/r_qt2409.htm
   - title: "Bank of Japan: Monetary policy releases"
     url: https://www.boj.or.jp/en/mopo/index.htm
-  - title: "FRED: USD/JPY spot (DEXJPUS), Japan immediate rate (IRSTCI01JPM156N), SOFR"
+  - title: "Japan Times (August 5, 2024): Nikkei suffers worst day since 1987"
+    url: https://www.japantimes.co.jp/business/2024/08/05/markets/nikkei-plunge
+  - title: "Reuters (McGeever, April 2024): funds lift short yen position to second largest ever"
+    url: https://wealthinsights.metrobank.com.ph/reuters/rpt-column-funds-lift-short-yen-position-to-second-largest-ever-mcgeever
+  - title: "The Star / Reuters (August 20, 2024): funds go long yen for first time in four years as carry trade unwinds"
+    url: https://www.thestar.com.my/business/business-news/2024/08/20/funds-go-long-yen-for-first-time-in-four-years-as-carry-trade-unwinds
+  - title: "CFTC: Commitments of Traders reports"
+    url: https://www.cftc.gov/MarketReports/CommitmentsofTraders/index.htm
+  - title: "Trading Economics (December 2025): Bank of Japan raises policy rate to 0.75%, highest since 1995"
+    url: https://tradingeconomics.com/japan/interest-rate/news/511284
+  - title: "Brunnermeier, Nagel & Pedersen (2008). Carry Trades and Currency Crashes (NBER w14473)"
+    url: https://www.nber.org/papers/w14473
+  - title: "Du, Tepper & Verdelhan (2018). Deviations from Covered Interest Rate Parity (NBER w23170)"
+    url: https://www.nber.org/papers/w23170
+  - title: "Fama, E. F. (1984). Forward and spot exchange rates. Journal of Monetary Economics"
+    url: https://doi.org/10.1016/0304-3932(84)90046-1
+  - title: "FRED: USD/JPY spot (DEXJPUS), Japan immediate rate (IRSTCI01JPM156N), SOFR, VIX"
     url: https://fred.stlouisfed.org/series/DEXJPUS
 ---
 import CarryTrade from '../../components/models/CarryTrade.astro';
@@ -25,6 +44,7 @@ import { fred, realizedVol, shortDate } from '../../lib/data';
 export const jpy = fred.get('DEXJPUS');
 export const spot = jpy.value;
 export const boj = fred.latest('IRSTCI01JPM156N');
+export const bojAsOf = fred.asOf('IRSTCI01JPM156N');
 export const sofr = fred.latest('SOFR');
 export const diff = sofr - boj;
 export const vol1y = realizedVol(jpy.obs.map((o) => o[1]), 252);
@@ -32,13 +52,34 @@ export const aug2024 = (() => {
   const seg = jpy.obs.filter(([d]) => d >= '2024-07-01' && d <= '2024-08-10');
   const hi = Math.max(...seg.map((o) => o[1]));
   const lo = Math.min(...seg.map((o) => o[1]));
-  return { hi, lo, move: hi / lo - 1 };
+  const hiDate = seg.find((o) => o[1] === hi)[0];
+  const loDate = seg.find((o) => o[1] === lo)[0];
+  return { hi, lo, hiDate, loDate, move: hi / lo - 1 };
 })();
+export const aug5 = jpy.obs.find(([d]) => d === '2024-08-05');
+export const aug2 = jpy.obs.find(([d]) => d === '2024-08-02');
+export const volAug24 = (() => { const xs = jpy.obs.filter(([d]) => d <= '2024-08-31').map((o) => o[1]); return realizedVol(xs, 21); })();
+export const fwd1y = spot * (1 + boj / 100) / (1 + sofr / 100);
+export const breakEven = spot / fwd1y - 1;
+export const carryToVol = diff / 100 / vol1y;
+export const jumps = (() => {
+  const xs = jpy.obs.map((o) => o[1]);
+  const r = []; for (let i = 1; i < xs.length; i++) r.push(Math.log(xs[i] / xs[i - 1]));
+  const m = r.reduce((a, b) => a + b, 0) / r.length;
+  const sd = Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / (r.length - 1));
+  const hits = r.filter((x) => x < -3 * sd);
+  const years = r.length / 252;
+  return { n: hits.length, perYear: hits.length / years, mean: hits.length ? -hits.reduce((a, b) => a + b, 0) / hits.length : 0, sd, years };
+})();
+export const vixAug24 = (() => { const seg = fred.obs('VIXCLS', '2024-08-01').filter(([d]) => d <= '2024-08-31'); return seg.reduce((a, b) => (b[1] > a[1] ? b : a)); })();
+export const vixJul24 = (() => { const seg = fred.obs('VIXCLS', '2024-07-01').filter(([d]) => d <= '2024-07-31'); return seg.reduce((a, b) => a + b[1], 0) / seg.length; })();
+export const hi52 = Math.max(...jpy.obs.slice(-252).map((o) => o[1]));
+export const lo52 = Math.min(...jpy.obs.slice(-252).map((o) => o[1]));
 export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
 
 ## The setup
 
-The yen carry trade funds at Japan's policy rate and invests in dollars, Mexican pesos, or anything else that pays more. In July and August 2024, a Bank of Japan hike and a weak US jobs print triggered an unwind that took the Nikkei down 12% in a day and sent USD/JPY from ¥{aug2024.hi.toFixed(1)} to ¥{aug2024.lo.toFixed(1)} in a few weeks, a {pct(aug2024.move)} appreciation of the yen against positions that had looked like free money for two years. The BoJ's overnight rate now stands at {boj.toFixed(2)}% against SOFR at {sofr.toFixed(2)}%, a differential of {diff.toFixed(2)} percentage points, with spot at ¥{spot.toFixed(2)} as of {shortDate(jpy.asOf)}. The question for anyone with a levered carry position is what the distribution of that position looks like now.
+The yen carry trade funds at Japan's policy rate and invests in dollars, Mexican pesos, or anything else that pays more. In July and August 2024, a Bank of Japan hike and a weak US jobs print triggered an unwind that took the Nikkei down 12% in a day and sent USD/JPY from ¥{aug2024.hi.toFixed(1)} on {shortDate(aug2024.hiDate)} to ¥{aug2024.lo.toFixed(1)} on {shortDate(aug2024.loDate)}, a {pct(aug2024.move)} appreciation of the yen against positions that had looked like free money for two years. The BoJ's overnight rate now stands at {boj.toFixed(2)}% (as of {shortDate(bojAsOf)}) against SOFR at {sofr.toFixed(2)}%, a differential of {diff.toFixed(2)} percentage points, with spot at ¥{spot.toFixed(2)} as of {shortDate(jpy.asOf)}, inside a one-year range of ¥{lo52.toFixed(1)} to ¥{hi52.toFixed(1)}. The question for anyone with a levered carry position is what the distribution of that position looks like now.
 
 <CarryTrade id="carry" />
 
@@ -50,22 +91,66 @@ $$
 \frac{F}{S} = \frac{1 + r_{\text{target}}\,T}{1 + r_{\text{fund}}\,T}
 $$
 
-Hold the high-yield currency and hedge it forward, and the forward discount hands back exactly the carry you earned. Hedged carry is zero (ignoring basis). The *unhedged* trade is therefore a pure bet that the spot rate will depreciate by less than the forward implies. The "CIP forward implies" box shows that break-even move for the live rates, with the forward level in yen next to spot. Everything above it is profit; everything below it is loss.
+Hold the high-yield currency and hedge it forward, and the forward discount hands back exactly the carry you earned. Hedged carry is zero (ignoring basis). The *unhedged* trade is therefore a pure bet that the spot rate will depreciate by less than the forward implies. The "CIP forward implies" box shows that break-even move for the live rates, with the forward level in yen next to spot. On today's rates the one-year forward is about ¥{fwd1y.toFixed(2)} per dollar: the yen has to appreciate by more than {pct(breakEven)} over the year before the carry is lost. Everything above it is profit; everything below it is loss.
+
+Covered parity is the one relationship in international finance that is enforced by arbitrage rather than by expectations, and even it is not exact. Du, Tepper and Verdelhan documented that since 2008 the forward rate has deviated persistently from the CIP level for every major currency, with the gap widest at quarter-ends when bank balance sheets are constrained. For the yen the deviation, the cross-currency basis, has usually made it more expensive to borrow dollars against yen than the interest differential implies. The basis is a cost to anyone hedging a dollar asset back into yen and a small extra return to the unhedged carry trader.
+
+## Uncovered parity and carry as a risk premium
+
+Uncovered interest parity says the expected spot change should equal the forward discount: a currency paying more should, on average, depreciate by the difference, leaving an unhedged investor with the same expected return in either currency. If that held, carry would earn nothing in expectation. It does not hold. Fama's 1984 paper showed that the forward premium predicts the subsequent spot change with the wrong sign: high-rate currencies tend to appreciate, or at least not depreciate enough, so the forward discount is mostly a risk premium rather than a forecast. That finding, the forward premium puzzle, is the reason carry exists as a strategy.
+
+What is the premium for? Brunnermeier, Nagel and Pedersen answered with the shape of the return distribution. Returns to carry are negatively skewed: many months of small gains from the differential and occasional large losses when the funding currency rallies. The crashes are not random. They cluster when risk appetite and funding liquidity fall, when the VIX spikes, and when positions are crowded, and they are more severe the more carry has accumulated beforehand. In their framing the carry trader is selling crash insurance, and the differential is the premium. The simulator's job is to price that insurance honestly.
+
+The ratio of the differential to volatility is the crude Sharpe ratio of the trade before the tail. On current data the differential of {diff.toFixed(2)} points against one-year realized volatility of {pct(vol1y)} gives a carry-to-volatility ratio of {carryToVol.toFixed(2)}. The higher that ratio, the more attractive the trade looks on a normal-distribution risk report, and the more capital crowds into it.
+
+## From negative rates to normalization
+
+The funding leg of the trade is a central bank's choice. The Bank of Japan introduced a negative policy rate of −0.1% in January 2016 and yield curve control in September 2016, capping the 10-year JGB yield near zero and then within widening bands. For eight years the yen was the cheapest major funding currency in the world, and when the Federal Reserve raised rates by over five percentage points in 2022 and 2023 while the BoJ held, the differential reached its widest since the early 1990s and USD/JPY rose from the ¥110s to above ¥160.
+
+Normalization came in steps. In March 2024 the BoJ ended negative rates and yield curve control, setting the policy rate at 0 to 0.1%. On July 31, 2024 it raised the rate to 0.25% and announced a plan to halve its monthly bond purchases. In January 2025 it raised to 0.5%, and in December 2025 to 0.75%, the highest since 1995. The overnight call rate series the model reads from FRED stood at {boj.toFixed(2)}% as of {shortDate(bojAsOf)}. Each step narrowed the differential by only a quarter point; what it did to the trade was informational. A funding rate that has been zero for a generation is a parameter; one that moves is a risk.
+
+## The August 2024 unwind
+
+The sequence is documented. On July 31 the BoJ hiked and Governor Ueda signaled more to come. On August 2 the US July payrolls report printed 114,000 against expectations near 175,000, with unemployment rising to 4.3%, and markets priced a faster Fed easing cycle. The differential was now narrowing from both ends. USD/JPY, which had closed at ¥{aug2 ? aug2[1].toFixed(2) : 'n/a'} on Friday August 2, traded at ¥{aug5 ? aug5[1].toFixed(2) : 'n/a'} on Monday August 5. That day the Nikkei 225 fell 12.4%, its largest one-day loss since October 1987, and TOPIX fell 12%; the S&P 500 lost 3% and the Nasdaq 3.4%. The VIX, which had averaged {vixJul24.toFixed(1)} in July, closed at {vixAug24[1].toFixed(1)} on {shortDate(vixAug24[0])}, and realized USD/JPY volatility over August came to {pct(volAug24)} annualized against the one-year figure of {pct(vol1y)} today.
+
+The BIS's post-mortem, Bulletin No 90, attributes the amplification to the unwinding of leveraged positions in thin August markets rather than to the news itself, and names yen-funded currency carry trades as the hardest-hit positions. Its rough estimate of yen-funded positions going into the event was around ¥40 trillion, or \$250 billion, with the caveat that data gaps bias the number down. By August 7 Deputy Governor Uchida had said the BoJ would not raise rates while markets were unstable; most of the equity losses were recovered within two weeks. The carry trade's losses were not, because the positions that had been closed at a loss were gone.
+
+## Crowded positioning: the observable
+
+The game theory of the unwind requires crowding, and crowding can be measured. The CFTC's weekly Commitments of Traders report shows the net position of leveraged funds and other speculators in yen futures on the CME. In the week to April 23, 2024, Reuters' tally of the data put speculators' net short yen position at 179,919 contracts, the second largest on record behind the 188,077 of June 2007, the previous carry peak. Leveraged funds cut their shorts sharply in the second half of July, the largest two-week retreat since 2011, and by mid-August 2024 funds were net long yen for the first time since 2021. The trade that had taken two years to build was unwound in about six weeks, and the positioning data showed the whole arc in advance.
+
+This is the indicator the model cannot contain. The jump frequency and size in the simulation are historical averages. The next jump's size is a function of how many positions sit on the same side today, and that number is published every Friday afternoon.
 
 ## Why the distribution is not normal
 
-Three features are built into the simulation. Daily spot changes are drawn from a Student-t distribution scaled to realized volatility, currently {pct(vol1y)} a year on one year of data; with four degrees of freedom, a four-sigma day is roughly ten times more likely than under a normal. On top of that, an adverse jump arrives with an annual probability and a mean size that are read off the yen's own history: the calibration line in the panel counts every day since 2010 on which the yen appreciated by more than three trailing-year standard deviations and uses the frequency and the average size of those days as the jump parameters. The chart underneath the histogram marks each of them, and the cluster in the shaded 2024 band is what an unwind looks like in daily data. Finally, a margin call closes the position when the levered loss reaches the threshold, which turns a path's temporary drawdown into a permanent one.
+Three features are built into the simulation. Daily spot changes are drawn from a Student-t distribution scaled to realized volatility, currently {pct(vol1y)} a year on one year of data; with four degrees of freedom, a four-sigma day is roughly ten times more likely than under a normal. On top of that, an adverse jump arrives with an annual probability and a mean size that are read off the yen's own history: the calibration line in the panel counts every day since 2010 on which the yen appreciated by more than three trailing-year standard deviations and uses the frequency and the average size of those days as the jump parameters. Against a full-sample daily standard deviation of {pct(jumps.sd, 2)}, there have been {jumps.n} such days in {jumps.years.toFixed(1)} years, about {jumps.perYear.toFixed(1)} a year, with an average yen appreciation of {pct(jumps.mean)} on those days. The chart underneath the histogram marks each of them, and the cluster in the shaded 2024 band is what an unwind looks like in daily data. Finally, a margin call closes the position when the levered loss reaches the threshold, which turns a path's temporary drawdown into a permanent one.
 
 Run it with the defaults. The mean return on equity is positive; carry is real income at a {diff.toFixed(2)}-point differential. The 99% VaR is a multiple of the mean. The expected shortfall beyond VaR is worse still. Skewness is negative, excess kurtosis is large, and a meaningful fraction of paths end in a margin call. Now set leverage to 10× and the margin-call probability roughly doubles while the mean barely improves: that is the shape of the trade's risk-return trade-off.
 
 ## VaR, CVaR, and what they miss
 
-Level III defines value at risk as the loss not exceeded with a given confidence over a horizon, and conditional VaR (expected shortfall) as the average loss in the tail beyond it. The model reports both from the simulated distribution rather than from a parametric formula. A parametric normal VaR on the same volatility would be far smaller, because it has no jumps and thin tails. The gap between the two is a measure of how much a risk report based on normal assumptions understates carry risk.
+Level III defines value at risk as the loss not exceeded with a given confidence over a horizon, and conditional VaR (expected shortfall) as the average loss in the tail beyond it. The model reports both from the simulated distribution rather than from a parametric formula. A parametric normal VaR on the same volatility would be far smaller, because it has no jumps and thin tails. The gap between the two is a measure of how much a risk report based on normal assumptions understates carry risk. Both measures also share a blind spot: they describe the distribution of a single position held passively, while the real loss in an unwind comes from being forced to close at the worst point. That is why the margin-call probability, not the VaR, is the headline statistic in the panel.
+
+## How to use the model
+
+Three experiments.
+
+First, leave everything at default and read the margin-call probability. Then set leverage to 3×, 5× and 10× in turn and record it. The mean return on equity scales roughly linearly; the margin-call probability does not. The curve you trace is the trade's real risk-return trade-off, and the point where the probability starts to accelerate is the leverage above which the trade is no longer carry but a short option on volatility.
+
+Second, set the jump probability to zero and compare the 99% VaR with the default. The difference is the price of the tail that a normal-distribution risk model never sees. Then set the jump probability to double its calibrated value, which is a crude way of saying "positioning is as crowded as spring 2024," and watch the expected shortfall.
+
+Third, narrow the differential by 25 basis points, the size of a single BoJ hike, and leave everything else fixed. The mean return falls a little. Now also raise the volatility by a quarter, which is what the hike actually did to the market in 2024. The second change dominates the first. The risk in a carry trade is not the rate the central bank sets; it is the uncertainty the central bank introduces when it starts moving.
 
 ## The game underneath
 
 Carry trades are crowded for a game-theoretic reason. Each trader's position is profitable as long as nobody exits. Each trader's stop-loss is set at a similar level because everyone uses similar risk models. When the price reaches the first cluster of stops, the forced selling moves the price to the next cluster. The unwind is a coordination failure in reverse: everyone's rational individual exit produces the collective crash that none of them could survive. The jump parameter in the simulator is a historical average of such days; the next jump's size is a function of how crowded the trade is now, which is the one thing the position's own P&L never tells you.
 
+## What to watch
+
+Four indicators. The CFTC net speculative yen position, published weekly: a net short approaching the 2007 and 2024 extremes is a crowded trade, and a fast reduction from an extreme is an unwind in progress. The BoJ's policy calendar and the overnight call rate the model reads ({boj.toFixed(2)}%): each hike narrows the carry a little and raises the volatility a lot. One-month realized and implied USD/JPY volatility against the differential: when the carry-to-volatility ratio ({carryToVol.toFixed(2)} today) falls, levered positions are cut mechanically, and that cutting is the unwind. And the VIX, because the carry trade is a risk-on position whatever the currencies involved, and the 2024 episode shows the two moving together.
+
 ## What this means for investors
 
 Carry pays you a premium for selling insurance against a currency shock. That is a legitimate trade at a legitimate price. Whether the price is right depends on the left tail, and the left tail depends on positioning, policy, and leverage, none of which appear in the carry itself. If you hold the trade, size it on the margin-call probability, not the Sharpe ratio. If you do not hold it but own Japanese equities, emerging-market debt, or anything funded in yen by someone else, you are exposed to its unwind anyway.
+
+By instrument, and for education rather than advice. A retail forex account long USD/JPY is the trade in its purest and most levered form, and the margin-call probability in the panel is the number that describes it. Currency-hedged Japanese equity funds are short yen by construction: they earn the differential as a hedging gain while USD/JPY is stable and give it back when the yen rallies, which is exactly the carry profile. Unhedged Japanese equity funds have the opposite exposure and were the better place to be in August 2024. Emerging-market local-currency bond funds are carry trades in a different costume, and their drawdowns cluster with the yen's. The common thread is that leverage funded in a currency that has just started to move is the risk, and the carry is the compensation for it.

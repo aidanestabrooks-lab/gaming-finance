@@ -3,28 +3,43 @@ title: "Kalshi Arbitrage: The Math of Mispriced Probabilities"
 date: 2026-09-25
 week: 9
 tags: [Markets, Game Theory]
-summary: "Event contracts are probabilities with a bid and an ask. When a set of mutually exclusive outcomes sums to something other than one, or when two venues disagree, there is a riskless trade, but only after fees, which on Kalshi are quadratic in price. Three tools below, loaded with the actual Kalshi and Polymarket quotes on the next Fed decisions: a bucket scanner, a cross-venue calculator, and a Kelly sizer for the edges that are not riskless."
+summary: "Event contracts are probabilities with a bid and an ask. When a set of mutually exclusive outcomes sums to something other than one, or when two venues disagree, there is a riskless trade, but only after fees, which on Kalshi are quadratic in price. This piece walks through the microstructure of a binary contract, the fee schedule, the CFTC litigation that made these markets legal in the US, Dutch books, cross-venue basis and Kelly sizing. Three tools are loaded with the actual Kalshi and Polymarket quotes on the next Fed decisions: a bucket scanner, a cross-venue calculator, and a Kelly sizer for the edges that are not riskless."
 takeaways:
-  - "A Dutch book exists when the sum of YES prices across all outcomes of a market is below one dollar minus fees (buy all YES) or above one dollar plus fees (buy all NO)."
+  - "A Dutch book exists when the sum of YES prices across all outcomes of a market is below one dollar minus fees (buy all YES) or above one dollar plus fees (buy all NO). On a near-dated Fed partition the sum is usually inside the fee band, which means no trade."
   - "Kalshi's fee is 7% of P(1−P) per contract, rounded up to the cent per order. It is largest at 50¢ and near zero at the extremes, so most apparent arbitrages in mid-priced buckets vanish after fees."
-  - "Cross-venue arbitrage locks capital until resolution. Annualize the return before you call it good; a 2% riskless return over nine months is not."
-  - "For edges that are not riskless, the Kelly fraction on a binary contract is (p − m)/(1 − m). Half Kelly keeps most of the growth with a fraction of the drawdown."
+  - "Cross-venue arbitrage locks capital until resolution and carries resolution and venue risk that the price gap does not pay for. Annualize the return and compare it with a Treasury bill before you call it good."
+  - "For edges that are not riskless, the Kelly fraction on a binary contract is (p − m)/(1 − m). Half Kelly keeps about three quarters of the growth with a fraction of the drawdown."
+  - "Event contracts have been legal on a CFTC-regulated exchange since 2021, and legal for elections since the 2024 Kalshi v. CFTC ruling. The rulebook is still being written, which is itself a risk to price."
 sources:
-  - title: "Kalshi: fee schedule and trading rules (see Help Center)"
-    url: https://kalshi.com/
+  - title: "Kalshi: fee schedule (PDF)"
+    url: https://kalshi.com/docs/kalshi-fee-schedule.pdf
+  - title: "CFTC: KalshiEX rule filing on trading fees (2022)"
+    url: https://cftc.gov/filings/orgrules/rule091222kexdcm003.pdf
   - title: "Kalshi: market data API (public, read-only)"
     url: https://trading-api.readme.io/
   - title: "Polymarket: Fed decision markets"
     url: https://polymarket.com/
-  - title: "CFTC: event contracts"
-    url: https://www.cftc.gov/
+  - title: "Jones Day: Kalshi files challenge to CFTC order rejecting its Congressional Control Contracts (Nov 2023)"
+    url: https://jonesday.com/ja/practices/experience/2023/11/kalshi-files-challenge-to-cftc-order-rejecting-listing-of-its-congressional-control-contracts
+  - title: "KalshiEX LLC v. CFTC, memorandum opinion, D.D.C., September 2024"
+    url: https://storage.courtlistener.com/recap/gov.uscourts.dcd.261465/gov.uscourts.dcd.261465.51.0_2.pdf
+  - title: "Covers: CFTC drops appeal in Kalshi election-contract case (May 2025)"
+    url: https://www.covers.com/industry/kalshi-cftc-lawsuit-appeal-election-betting-contracts-drop-may-2025
+  - title: "DLA Piper: CFTC settles enforcement action against Polymarket (January 2022)"
+    url: https://www.dlapiper.com/en/insights/publications/2022/1/cftc-settles-enforcement-action-against-defi-platform-polymarket
+  - title: "Stanford Encyclopedia of Philosophy: Dutch Book Arguments"
+    url: https://plato.stanford.edu/entries/dutch-book/
   - title: "Kelly, J. L. (1956). A new interpretation of information rate"
     url: https://ieeexplore.ieee.org/document/6771227
+  - title: "Thorp, E. O. (2006). The Kelly criterion in blackjack, sports betting and the stock market"
+    url: https://www.eecs.harvard.edu/cs286r/courses/fall12/papers/Thorpe_KellyCriterion2007.pdf
+  - title: "FRED: 3-month Treasury bill yield (DGS3MO)"
+    url: https://fred.stlouisfed.org/series/DGS3MO
 ---
 import BucketArb from '../../components/models/BucketArb.astro';
 import CrossVenueArb from '../../components/models/CrossVenueArb.astro';
 import KellySizer from '../../components/models/KellySizer.astro';
-import { kalshi, polymarket, fedOutcomes, shortDate } from '../../lib/data';
+import { kalshi, polymarket, fedOutcomes, fred, shortDate, daysBetween } from '../../lib/data';
 
 export const fo = fedOutcomes();
 export const ev = kalshi.fedDecision();
@@ -33,12 +48,40 @@ export const sumBid = ev.markets.reduce((s, m) => s + (m.yes_bid ?? 0), 0);
 export const busiest = fo.outcomes.filter((o) => o.kalshi && o.poly).sort((a, b) => (b.kalshi.volume ?? 0) - (a.kalshi.volume ?? 0))[0];
 export const kAsk = busiest?.kalshi.yes_ask;
 export const pAsk = busiest?.poly.bestAsk != null ? Math.round(busiest.poly.bestAsk * 100) : null;
+export const feeRate = kalshi.fee.rate;
+export const feeMid = (feeRate * 0.25 * 100).toFixed(2);
+export const fee95 = (feeRate * 0.95 * 0.05 * 100).toFixed(2);
+export const nOut = ev.markets.length;
+export const top = [...ev.markets].sort((a, b) => (b.yes_ask ?? 0) - (a.yes_ask ?? 0))[0];
+export const feeAll = ev.markets.reduce((s, m) => s + feeRate * ((m.yes_ask ?? 0) / 100) * (1 - (m.yes_ask ?? 0) / 100), 0) * 100;
+export const grossYes = 100 - sumAsk - feeAll;
+export const lockDays = Math.max(1, daysBetween(kalshi.fetched.slice(0, 10), ev.markets[0].close_time.slice(0, 10)));
+export const bill3m = fred.latest('DGS3MO');
+export const annualize = (r, days) => Math.pow(1 + r, 365 / days) - 1;
+export const kVolM = ev.markets.reduce((s, m) => s + (m.volume ?? 0), 0) / 1e6;
+export const pe = polymarket.fedDecision();
+export const pVolM = pe?.volume != null ? pe.volume / 1e6 : null;
+export const hike = fo.outcomes.find((o) => o.key === 'hike25');
+export const kellyM = hike?.kalshi?.yes_ask ?? null;
+export const kellyP = hike?.poly?.bestBid != null && hike?.poly?.bestAsk != null ? Math.round(((hike.poly.bestBid + hike.poly.bestAsk) / 2) * 1000) / 10 : null;
+export const kellyF = kellyM != null && kellyP != null ? (kellyP > kellyM ? (kellyP - kellyM) / (100 - kellyM) : (kellyM - kellyP) / kellyM) : null;
+export const kellySide = kellyM != null && kellyP != null ? (kellyP > kellyM ? 'YES' : 'NO') : 'either side';
+export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
+export const cents = (x) => (x == null ? 'n/a' : `${x}¢`);
 
 ## The setup
 
-A Kalshi contract pays $1 if an event happens and $0 otherwise, so its price is the market's probability. Markets with several outcomes (the five possible results of one FOMC meeting: cut 50 or more, cut 25, hold, hike 25, hike 50 or more) are a partition: exactly one resolves YES. The prices of a partition should sum to $1. They often do not, because each outcome has its own order book, its own liquidity, and its own crowd.
+A Kalshi contract pays \$1 if an event happens and \$0 otherwise, so its price is the market's probability. Markets with several outcomes (the five possible results of one FOMC meeting: cut 50 or more, cut 25, hold, hike 25, hike 50 or more) are a partition: exactly one resolves YES. The prices of a partition should sum to \$1. They often do not, because each outcome has its own order book, its own liquidity, and its own crowd.
 
-The tools below are loaded with the real quotes. As of {shortDate(kalshi.fetched)}, the YES asks on "{ev.title}" sum to {sumAsk}¢ and the YES bids to {sumBid}¢; the partition is priced correctly when $1.00 sits between those two numbers after fees. The snapshot is refreshed with each daily rebuild, not streamed, so treat it as the shape of the market rather than an executable quote.
+The tools below are loaded with the real quotes. As of {shortDate(kalshi.fetched)}, the YES asks on "{ev.title}" sum to {sumAsk}¢ and the YES bids to {sumBid}¢; the partition is priced correctly when \$1.00 sits between those two numbers after fees. The {nOut} outcomes of that event have traded about \${kVolM.toFixed(1)} million of contracts on Kalshi{pVolM != null ? ` and the matching Polymarket event about $${pVolM.toFixed(1)} million` : ''}. The snapshot is refreshed with each daily rebuild, not streamed, so treat it as the shape of the market rather than an executable quote.
+
+## How an event contract works
+
+The microstructure matters because it is where the arbitrage lives. Each Kalshi market is a binary contract with a \$1 notional. Prices are quoted in cents from 1 to 99, and every order book has two sides that are mirror images: a bid to buy YES at 40¢ is the same instruction as an offer to sell NO at 60¢, and the exchange matches them that way. Buyers post full collateral. A YES buyer at 40¢ deposits 40¢; a NO buyer deposits 60¢; the exchange holds the dollar until the market settles, and nothing is levered. There is no shorting beyond buying the other side, no margin, and no interest paid on collateral, which is the hidden cost of every trade discussed here.
+
+Resolution is the second structural fact. A Fed-decision market settles on the published target range in the FOMC statement. A CPI market settles on the BLS release. Two venues can list "the same" event with different resolution criteria, and most apparent cross-venue arbitrages that survive fees die here. Kalshi settles on its own rulebook under CFTC oversight. Polymarket settles through an on-chain oracle whose outcome can be disputed and voted on. For a Fed decision the two agree; for a contested election or a revised economic release, they need not.
+
+## The fee schedule and why it is quadratic
 
 The fee is where most of the free money goes. Kalshi charges, per order,
 
@@ -46,23 +89,45 @@ $$
 \text{Fee} = \left\lceil\, 0.07 \times C \times P \times (1 - P) \,\right\rceil_{\text{cents}}
 $$
 
-where $C$ is contracts and $P$ is the price in dollars. The product $P(1-P)$ peaks at $0.25$ when $P = 0.5$, so a 50¢ contract costs 1.75¢ in fees and a 95¢ contract costs about 0.33¢. Fees punish mid-priced buckets and spare the tails.
+where $C$ is contracts and $P$ is the price in dollars. The product $P(1-P)$ peaks at $0.25$ when $P = 0.5$, so a 50¢ contract costs {feeMid}¢ in fees and a 95¢ contract costs about {fee95}¢. Fees punish mid-priced buckets and spare the tails. The site reads the schedule from Kalshi's public API, which labels each market's fee type; the general rate is {(feeRate * 100).toFixed(0)}% of $P(1-P)$ for orders that take liquidity, and some series charge a reduced maker rate or a flat fee. A contract held to settlement pays the \$1 without a further charge.
+
+Why quadratic? Because $P(1-P)$ is the variance of a Bernoulli outcome. A 50¢ contract is the one whose outcome is least known, so each trade transfers the most risk; a 97¢ contract is almost settled. Pricing the fee on variance makes it proportional to the risk exchanged, and it is also the shape that extinguishes the easiest arbitrage, in the mid-priced buckets of a partition. On the current Fed event the fee on buying every YES comes to about {feeAll.toFixed(2)}¢ per set before rounding. Add that to the {sumAsk}¢ of asks and the buy-all-YES trade {grossYes > 0 ? 'nets' : 'loses'} {Math.abs(grossYes).toFixed(2)}¢ against its \$1 payout.
+
+## A short regulatory history
+
+Event contracts are swaps under the Commodity Exchange Act, so they may only trade on a CFTC-registered exchange, and the Commission may prohibit contracts that involve gaming or are contrary to the public interest. That power, and its limits, were litigated from 2022 to 2025.
+
+In January 2022 the CFTC settled with Blockratize, the operator of Polymarket, for \$1.4 million over unregistered binary options, and Polymarket wound down its non-compliant US markets. Kalshi had been approved as a designated contract market in 2020 and launched in 2021. In June 2023 Kalshi self-certified contracts on which party would control each chamber of Congress. On September 22, 2023 the CFTC disapproved them as gaming and contrary to the public interest. Kalshi sued in November 2023. In September 2024 Judge Jia Cobb of the US District Court for the District of Columbia held that the Commission had exceeded its authority: the contracts were not gaming and Congress had not authorized the public-interest review the CFTC had applied. The CFTC appealed and won a temporary stay; the D.C. Circuit lifted it in early October 2024, and the contracts traded through the November election. On May 5, 2025 the Commission, by a 3 to 0 vote, moved to dismiss its own appeal. Election contracts have been settled law since.
+
+Why this belongs in an arbitrage piece: regulatory risk is a term in the basis between venues. Through most of 2024 the same election outcome traded on a CFTC-regulated exchange open to US residents and on an offshore venue they could not legally use. The people who saw the gap could not close it, which is why it persisted; where the rules are still unsettled, as with the sports contracts several states contested in 2025, the same logic applies.
+
+## Dutch books
+
+A Dutch book is a set of bets that wins regardless of the outcome. Ramsey in 1926 and de Finetti in 1937 showed that anyone whose probabilities do not sum to one across a partition can be made to accept a set of bets that loses for certain. Markets are the same thing in reverse. If the asks on a partition sum to less than \$1 after fees, buy them all and collect the dollar. If the bids sum to more than \$1 plus fees, sell them all. A rational market keeps \$1 inside the band between those two sums, and the width of the band is set by the fee schedule and the bid-ask spreads.
 
 ## Tool 1: the bucket scanner
 
-Enter the YES ask for each bucket. The scanner computes two trades. Buy every YES: cost is the sum of prices plus fees, payout is exactly $1 per contract set. Buy every NO: cost is the sum of $(1 - P_i)$ plus fees, and payout is $(N-1)$ dollars because every bucket but one resolves NO.
+Enter the YES ask for each bucket. The scanner computes two trades. Buy every YES: cost is the sum of prices plus fees, payout is exactly \$1 per contract set. Buy every NO: cost is the sum of $(1 - P_i)$ plus fees, and payout is $(N-1)$ dollars because every bucket but one resolves NO.
 
 <BucketArb id="fed-buckets" />
 
-The YES column holds each outcome's actual ask and the NO column its actual NO ask, which is not simply one dollar minus the YES ask: the two sides have their own spreads. Switch between the upcoming meetings in the dropdown. Near-dated meetings tend to have one outcome priced near 90¢ and the rest near 1¢, where fees are tiny; further-out meetings spread the probability across outcomes, which is exactly where the quadratic fee bites hardest. The band of fee-free sums is reported at the bottom right: any sum inside it is noise, not opportunity. Edit a cell to test a quote you see live.
+The YES column holds each outcome's actual ask and the NO column its actual NO ask, which is not simply one dollar minus the YES ask: the two sides have their own spreads. Switch between the upcoming meetings in the dropdown. Near-dated meetings tend to have one outcome priced near 90¢ and the rest near 1¢, where fees are tiny; on the current snapshot the favored outcome is "{top.label}" at {cents(top.yes_ask)}. Further-out meetings spread the probability across outcomes, which is exactly where the quadratic fee bites hardest. The band of fee-free sums is reported at the bottom right: any sum inside it is noise, not opportunity.
 
 ## Tool 2: cross-venue arbitrage
 
-The same event trades on two venues at different prices. Buy YES where it is cheaper and NO where it is dearer; the payout is $1 regardless of the outcome.
+The same event trades on two venues at different prices. Buy YES where it is cheaper and NO where it is dearer; the payout is \$1 regardless of the outcome.
 
 <CrossVenueArb id="cross" />
 
-Both venues quote the same five outcomes of the next FOMC decision, and the table shows every outcome's bid and ask side by side. The calculator evaluates both directions, YES on Kalshi with NO on Polymarket and the reverse, each leg at that venue's real ask, and keeps the cheaper one. On the most-traded outcome the Kalshi YES ask is {kAsk}¢ against a Polymarket ask of {pAsk}¢. The break-even condition is that the two legs plus fees cost less than the $1 payout. Below it, a trade that is "right" on both legs still loses. Above it, the return is riskless but the capital is locked until the market closes, and the days-to-resolution slider is preset to that date. The annualized figure is the one to compare against Treasury bills, and it is frequently lower.
+Both venues quote the same five outcomes of the next FOMC decision, and the table shows every outcome's bid and ask side by side. The calculator evaluates both directions, YES on Kalshi with NO on Polymarket and the reverse, each leg at that venue's real ask, and keeps the cheaper one. On the most-traded outcome the Kalshi YES ask is {cents(kAsk)} against a Polymarket ask of {cents(pAsk)}. The break-even condition is that the two legs plus fees cost less than the \$1 payout. Below it, a trade that is "right" on both legs still loses. Above it, the return is riskless but the capital is locked until the market closes, and the days-to-resolution slider is preset to that date. The annualized figure is the one to compare against Treasury bills, and it is frequently lower.
+
+The cross-venue basis has four components. Fees on both legs, which the calculator handles. Settlement currency: Polymarket trades in a dollar stablecoin, and moving money in and out has its own cost. Resolution risk: if the two rulebooks ever disagree, the "riskless" position pays \$1 on one leg and \$0 on the other. And access: an arbitrageur confined to one venue cannot close the gap.
+
+## Capital lock-up, resolution risk and venue risk
+
+The current Fed event closes in {lockDays} days. Suppose a cross-venue trade yields one cent gross on a 99¢ outlay. That is {pct(0.01 / 0.99, 2)} over the lock-up, which annualizes to {pct(annualize(0.01 / 0.99, lockDays))} against a three-month Treasury bill at {bill3m.toFixed(2)}%. A two-cent edge that resolves in a week is a different trade from the same edge nine months out, and the comparison with the bill is the one to internalize: idle collateral earns nothing on either venue.
+
+Venue risk is the term no spreadsheet shows. Kalshi member funds sit at a CFTC-regulated clearinghouse, segregated from the exchange's own money. Polymarket positions are smart-contract balances in a stablecoin, exposed to protocol bugs, oracle disputes and the stablecoin's peg. These risks are small per trade and not zero across many, and they are why a persistent 1¢ gap between venues is better read as the price of venue risk than as free money.
 
 ## Tool 3: Kelly sizing when the edge is not riskless
 
@@ -76,12 +141,32 @@ and on NO, when $p < m$, it is $f^* = (m - p)/m$. Expected log growth per bet is
 
 <KellySizer id="kelly" bankroll={10000} />
 
-The default edge is not invented: the market price is Kalshi's YES ask on the "Hike 25 bp" outcome and the belief is Polymarket's mid on the same outcome. Two venues, one event, two probabilities. If you trust the deeper book you have a Kelly stake on the other one; if the gap is a cent or two, full Kelly is still a small fraction of bankroll, which is the point.
+The default edge is not invented: the market price is Kalshi's YES ask on the "Hike 25 bp" outcome and the belief is Polymarket's mid on the same outcome. Two venues, one event, two probabilities. On the current snapshot that is a Kalshi ask of {cents(kellyM)} against a Polymarket mid of {cents(kellyP)}, which puts the full-Kelly stake at {kellyF != null ? pct(kellyF) : 'n/a'} of bankroll on the {kellySide} side. If you trust the deeper book you have a Kelly stake on the other one; if the gap is a cent or two, full Kelly is still a small fraction of bankroll, which is the point.
+
+Kelly's 1956 result is that betting $f^*$ maximizes the expected growth rate of wealth over repeated bets, and that any larger fraction eventually loses to it with probability one. Thorp's caveat is the one that matters: $p$ is an estimate, and overestimating it by a few points pushes a full-Kelly bettor past the peak. Fractional Kelly is insurance against your own estimation error; half Kelly keeps roughly three quarters of the growth rate with half the variance of log wealth.
+
+## How to use the model
+
+Three experiments.
+
+First, in the bucket scanner, select the furthest-out meeting and read the sum of asks. Then set every mid-priced bucket's ask one cent lower, as though you had been able to lift a bid rather than pay an ask. Watch the trade move from loss to break-even and note how far inside the fee band it still sits. That is how much better than the posted market you would need to execute: a realistic picture of what a maker on Kalshi can earn.
+
+Second, in the cross-venue calculator, leave the quotes alone and drag the days-to-resolution slider from its preset to seven days. The gross profit does not change; the annualized return rises by a large multiple. The same gap is a different trade depending on when it pays, which is why near-dated gaps are arbitraged away fastest.
+
+Third, in the Kelly sizer, set your belief three cents above the market and read the full-Kelly stake; then move it one cent in the other direction. The stake flips sign. A three-cent conviction and a one-cent error are not distinguishable in these markets, which is the whole argument for fractional Kelly.
 
 ## The game theory underneath
 
 Why do these gaps exist at all? Because each bucket's order book is a separate game with separate players. A trader with a strong view on one range pushes that bucket without touching the others. Arbitrageurs are the players who enforce the partition constraint, and their incentive to do so is exactly the after-fee profit above. When fees exceed the gap, nobody enforces it, and the partition can stay mispriced for days. That is why the inefficiencies cluster in mid-priced buckets of thin markets.
 
+There is a second game between the venues. The venue with deeper books attracts the informed traders, and its prices become the reference the other venue copies. The copiers are paid by the basis and keep it small. If one venue is closed to a class of traders, as Polymarket was to US residents through 2024, the copiers are fewer and the basis wider.
+
+## What to watch
+
+Three indicators tell you whether the opportunity set is widening or narrowing. The sum of asks on the furthest-out Fed partition: the more it exceeds 100¢ plus fees, the more a maker can earn by supplying the other side. The volume ratio between Kalshi and Polymarket on the same event: the venue losing volume is the one whose prices will lag, and lagging prices are where cross-venue gaps open. And the regulatory docket: a CFTC rulemaking on event contracts or a state ruling on sports contracts changes who can trade where, and that changes the basis before it changes the prices.
+
 ## What this means for investors
 
 Prediction markets are a probability feed with a fee schedule bolted on. The riskless trades are rare, small, and capital-hungry once annualized; on the Fed partition above they usually fail the fee test outright. The real use for most investors is the third tool: a disciplined way to size a view against a market price, which is the same problem as sizing any trade, with the advantage that the payoff is binary and the math is exact.
+
+By instrument, and for education rather than advice: a Kalshi or Polymarket position is a fully collateralized binary: the maximum loss is the premium and the opportunity cost is a bill yield on the collateral. Fed-decision contracts are the most liquid and the most redundant, since fed funds futures price the same thing with far more depth; their value to an individual is as a cross-check. Economic-release contracts (CPI, payrolls) are thinner, and the mid-priced buckets are where a calibrated forecaster can earn the fee and then some. And for anyone using these prices as inputs, a 50¢ market is both the most informative price and the most expensive to correct, so it is the one to trust least.

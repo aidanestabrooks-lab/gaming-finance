@@ -3,17 +3,30 @@ title: "Herding Into the Trade: Information Cascades"
 date: 2026-10-09
 week: 11
 tags: [Game Theory, Markets]
-summary: "A crowd of rational investors, each with a weakly informative private signal, can lock onto the wrong answer after only two of them act. The model is Bikhchandani, Hirshleifer and Welch; the simulator below runs it thousands of times and shows how often the herd is wrong, how fast it forms, and why it is fragile."
+summary: "A crowd of rational investors, each with a weakly informative private signal, can lock onto the wrong answer after only two of them act. The model is Bikhchandani, Hirshleifer and Welch (1992); the simulator below runs it thousands of times and shows how often the herd is wrong, how fast it forms, and why it is fragile. The text derives the numbers, checks them against the laboratory, bank runs, IPO books, the 2021 meme-stock episode and analyst herding, and sets out what a thin public record looks like before it breaks."
 takeaways:
-  - "A cascade starts as soon as the public record leans two to one. From that point every rational agent ignores private information, so the crowd stops aggregating it."
-  - "With 70% accurate signals, about one herd in six is wrong. With 60% signals it is more than one in four. The crowd's confidence is not evidence."
-  - "Cascades are fragile precisely because they contain little information. A single credible public signal can reverse one, which is what a 'narrative shift' is."
-  - "The agents who moved before the cascade are the only ones whose actions carry information. Weight early movers, discount followers."
+  - "A cascade starts as soon as the public record leans two to one. From that point every rational agent ignores private information, so the crowd stops aggregating it: a thousand investors know no more than the first two or three."
+  - "With 70% accurate signals about one herd in six is wrong; with 60% signals it is nearly one in three. A majority vote of sixty such signals would be wrong far less than 1% of the time at 70%. The gap between those two numbers is the information the cascade destroys."
+  - "Cascades are fragile precisely because they contain little information. A single credible public signal reverses one, which is what a 'narrative shift' is. Rational agents, thin record, fast flip."
+  - "The pattern recurs in the data: cascades formed in most laboratory sessions with an early imbalance; more than $40 billion left Silicon Valley Bank in a single day; GameStop rose more than 1,600% in sixteen days with short covering only a small fraction of buying; analysts' recommendations move the next two analysts whether or not the consensus turns out to be right."
+  - "Treat consensus as a count of informative signals, not a count of people. Weight early movers, discount followers, and position for convexity ahead of the next strong public signal."
 sources:
   - title: "Bikhchandani, Hirshleifer & Welch (1992). A theory of fads, fashion, custom, and cultural change as informational cascades"
     url: https://www.jstor.org/stable/2138632
   - title: "CFA Institute: Behavioral Finance and Investment Processes (Level III)"
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/behavioral-finance-investment-processes
+  - title: "Anderson, L. & Holt, C. (1997). Information cascades in the laboratory. American Economic Review 87(5), 847-862"
+    url: https://ideas.repec.org/a/aea/aecrev/v87y1997i5p847-62.html
+  - title: "Diamond, D. & Dybvig, P. (1983). Bank runs, deposit insurance, and liquidity. Journal of Political Economy 91(3), 401-419"
+    url: https://ideas.repec.org/a/ucp/jpolec/v91y1983i3p401-19.html
+  - title: "Federal Reserve: Vice Chair Barr's testimony on the failure of Silicon Valley Bank (March 28, 2023)"
+    url: https://www.federalreserve.gov/newsevents/testimony/barr20230328a.htm
+  - title: "Welch, I. (1992). Sequential sales, learning, and cascades. Journal of Finance 47(2), 695-732"
+    url: https://ideas.repec.org/a/bla/jfinan/v47y1992i2p695-732.html
+  - title: "SEC staff report on equity and options market structure conditions in early 2021 (October 14, 2021)"
+    url: https://www.sec.gov/files/staff-report-equity-options-market-struction-conditions-early-2021.pdf
+  - title: "Welch, I. (2000). Herding among security analysts. Journal of Financial Economics 58(3), 369-396"
+    url: https://www.ivo-welch.org/research/journalcopy/2000-jfe.pdf
 ---
 import CascadeSim from '../../components/models/CascadeSim.astro';
 
@@ -25,6 +38,20 @@ The first investor follows their signal. The second investor sees the first acti
 
 <CascadeSim id="cascade" note="Binary state, binary signals, Bayesian agents acting in sequence. Each run draws a fresh state and fresh signals." />
 
+## The formal model
+
+Bikhchandani, Hirshleifer and Welch set the problem up with two states of the world, a binary signal of accuracy $s$, and agents who move in a fixed order. Everything turns on one piece of Bayesian arithmetic. If the public record implies $k$ more UP signals than DOWN signals, the posterior probability that the true state is UP is
+
+$$
+P(\text{UP} \mid k) = \frac{s^k}{s^k + (1-s)^k}
+$$
+
+With $k = 1$ this is simply $s$. With $k = 2$ it is $s^2 / (s^2 + (1-s)^2)$, which at $s = 0.7$ is 0.845. Now give the next agent a private DOWN signal. One DOWN against two UPs leaves a net count of one, and the posterior falls back to $s = 0.7$, still above one half. The rational action is to buy. The private signal was processed and it was outweighed. That is the cascade condition: once the public record leans by two, no single private signal can reverse it, and from that agent onward actions carry no information about signals at all.
+
+The simulator uses the convention that an agent whose own signal would leave the net count at zero or one follows their own signal, so a cascade begins exactly when the running difference between inferred UP and DOWN signals reaches two in absolute value. Everything the simulator reports follows from that rule and from $s$.
+
+Three properties of cascades follow from the model, and they are the ones to carry into markets. Cascades are **idiosyncratic**: which direction the crowd settles on depends on the order in which the first few signals happened to arrive, not on the balance of information in the population. They are **fragile**: the public record behind a cascade is two or three signals deep, so any public information at least that strong overturns it. And they are **frequently wrong**, by an amount that the next section computes.
+
 ## The arithmetic
 
 With the tie rule above, the first two agents produce a cascade unless their signals disagree. The probability that they agree and are right is $s^2$; that they agree and are wrong is $(1-s)^2$; that they disagree and the process restarts is $2s(1-s)$. Conditioning on the process eventually settling,
@@ -33,7 +60,9 @@ $$
 P(\text{wrong cascade}) = \frac{(1-s)^2}{s^2 + (1-s)^2}
 $$
 
-At $s = 0.7$ that is $0.09 / 0.58 \approx 15.5\%$. At $s = 0.6$ it is $0.16/0.52 \approx 30.8\%$. The simulator's closed-form box reports this number; the Monte Carlo box next to it should land within sampling error. Notice what is *not* in the formula: the number of agents. A thousand investors are no more accurate than three, because only the first two or three contributed information.
+At $s = 0.7$ that is $0.09 / 0.58 \approx 15.5\%$. At $s = 0.6$ it is $0.16/0.52 \approx 30.8\%$. At $s = 0.55$ it is about 40%, at $s = 0.8$ about 5.9%, at $s = 0.9$ about 1.2%. The simulator's closed-form box reports this number; the Monte Carlo box next to it should land within sampling error. Notice what is *not* in the formula: the number of agents. A thousand investors are no more accurate than three, because only the first two or three contributed information.
+
+The size of the loss becomes clear against the benchmark of what the crowd could have known. If sixty agents with 70%-accurate signals pooled them and voted, the majority would be wrong about 0.1% of the time; with 60% signals, about 7.5%. The cascade is wrong 15.5% and 30.8% of the time respectively. The difference between the two columns is the information that the sequential structure throws away. This is Condorcet's jury theorem in reverse: independent signals aggregate beautifully when they are revealed, and not at all when each agent only reveals an action that has already been contaminated by the actions before it.
 
 ## What the charts show
 
@@ -41,10 +70,57 @@ The histogram records the agent at which each cascade began. Most start at agent
 
 The strip shows one run. Teal dots acted on their own signal. Grey dots followed the herd. Red dots followed a herd that was wrong. Hit "re-run with new seed" a few times at $s = 0.6$ and you will see entire rows of red: a market that has confidently priced the wrong direction with every participant behaving rationally.
 
+## How to use the model
+
+**Experiment 1: the baseline.** Leave the signal accuracy at 70% with 60 agents and 2,000 runs. The theory box reads 15.5% and the Monte Carlo share of wrong cascades should sit within a point or two of it. The median onset is agent 2. Look at the share of agents acting on their own signal: it is a few percent, because in a typical run only the first two or three agents ever use what they know.
+
+**Experiment 2: weaker signals.** Slide accuracy down to 60%. The wrong-cascade share roughly doubles to about 31%, the histogram spreads to the right as more early pairs cancel, and the strip turns red in roughly one run in three. Nothing about the agents changed. The only thing that changed is how much each of them knew, and the crowd's behavior looks identical from the outside in the right and wrong cases. Confidence of the herd is not evidence.
+
+**Experiment 3: more agents, same answer.** Return accuracy to 70% and move the number of agents from 60 up to 200, then down to 10. The wrong-cascade share does not move beyond sampling noise. The share acting on their own signal falls as $N$ rises because the same two or three informative actions are now diluted across a longer line of followers. This is the point of the model in one slider: adding participants adds followers, not information.
+
+**Experiment 4: strong signals still cascade.** Set accuracy to 90%. Wrong cascades fall to about 1%, but the median onset is still agent 2 and the share of agents using their own information is no higher than before. Good signals make the crowd right more often; they do not make the crowd aggregate.
+
+## What the record shows
+
+**The laboratory.** Anderson and Holt (1997) ran the model with human subjects. Participants drew balls from one of two urns they could not see, announced in sequence which urn they thought was in use, and were paid for a correct guess. When the first decisions matched, following the established pattern was the rational choice whatever the private draw showed, and the authors report that such cascades formed in most of the periods where that early imbalance occurred. The mechanism is not a thought experiment; undergraduates produce it with real money on the table.
+
+**Bank runs.** Diamond and Dybvig (1983) showed that an ordinary demand-deposit contract has multiple equilibria, one of which is a run, and that the run is rational for each depositor once enough others are running. The informational cascade is the mechanism that moves depositors from the good equilibrium to the bad one: each withdrawal is an observed action, and after a few of them the private information of the remaining depositors about the bank's actual solvency stops mattering. Silicon Valley Bank is the clean modern case. According to the Federal Reserve's Vice Chair for Supervision, depositors pulled more than \$40 billion on March 9, 2023, the bank told supervisors it expected even greater outflows the next day, and it failed on Friday, March 10. A concentrated depositor base that talked to itself in real time compressed a cascade that once took weeks into a day.
+
+**IPO bookbuilding.** Welch (1992) applied the cascade logic to offerings sold to investors in sequence. Later investors infer from earlier orders, so issues tend to succeed or fail quickly; demand is elastic enough that even risk-neutral issuers underprice to start a favorable cascade; and underwriters have a reason to split selling across segmented markets to limit communication among investors. A book that is "many times covered" is the cascade seen from the issuer's side. The coverage ratio counts orders, not independent opinions.
+
+**Meme stocks.** The SEC staff's October 2021 report on the January 2021 episode gives the numbers. GameStop closed at \$347.51 on January 27, 2021, more than 1,600% above its January 11 close, and reached an intraday high of \$483.00 the following day. Short interest had reached about 123% of float, which made the short-squeeze story plausible. But the staff found that buying by holders of short positions, while present, was a small fraction of overall buy volume, and that the price stayed high after the direct effects of covering would have waned. The dominant buyers were individuals observing other individuals buy. That is the model's second agent onward, at scale, with the public record visible on a message board.
+
+**Analyst herding.** Welch (2000) studied recommendations and found that an analyst's buy or sell call has a significant positive influence on the next two analysts. Critically, the influence of the prevailing consensus is not stronger when the consensus turns out to forecast prices correctly, which is the signature of herding on little information rather than on shared insight. The consensus also pulls harder in favorable market conditions, which Welch notes makes bull markets intrinsically more fragile: the record behind them is thinner than its length suggests.
+
 ## Why cascades break
 
 A cascade rests on two or three signals. Any public information at least as strong as that, an earnings release, a regulatory decision, a credible contrarian with a track record, overturns it, and the crowd flips as fast as it formed. This is the mechanism behind sudden narrative reversals that look irrational in hindsight. Nothing irrational happened. A thin public record was replaced by a thicker one.
 
+The model also says who can break a cascade. An agent known to have a more precise signal than the crowd, a short seller with a published forensic report, a regulator, a company's own disclosure, is not one more follower; their action carries enough weight to reset the count. That is why reversals cluster around scheduled public signals and around the entry of identifiable informed players, and why the time between the start of a cascade and the next such signal is the window of maximum fragility.
+
+## What to watch
+
+The practical question is how thick the public record behind a consensus is. Indicators:
+
+- **Independent sources versus participants.** Count the distinct pieces of evidence behind a position, not the number of holders. Three primary sources cited by a thousand accounts is a two-signal cascade.
+- **Dispersion of forecasts.** When analyst estimates converge on each other faster than the underlying data are arriving, the convergence is herding, not learning.
+- **Who moved first.** Early movers with a verifiable information edge are the only actions that carry weight. Late inflows, especially retail and systematic flows, are followers by construction.
+- **Velocity of participation.** A fast run-up in unique participants with no new fundamental release is the strip turning grey.
+- **The calendar.** The next scheduled public signal strong enough to reset the count is the moment the cascade is tested. Position sizing should reflect the distance to that date.
+- **Deposit and funding concentration.** For financial names, the share of uninsured or institutionally concentrated funding is the speed at which a withdrawal cascade can run.
+
 ## What this means for investors
 
-Treat consensus as a count of informative signals, not as a count of people. Ask who moved first and whether they had private information, and weight the followers at zero. When a position is crowded and the public record behind it is thin, the asymmetry favors the contrarian: the cascade cannot get more right by adding followers, but it can be overturned by a single strong signal. The trade is not "bet against the crowd." It is "find out how much the crowd actually knows."
+Treat consensus as a count of informative signals, not as a count of people. Ask who moved first and whether they had private information, and weight the followers at zero. The implications differ by instrument.
+
+**Equities.** Crowded positioning built on a thin record is the setup for a reversal, and the asymmetry favors the contrarian: the cascade cannot get more right by adding followers, but it can be overturned by a single strong signal. The trade is not "bet against the crowd." It is "find out how much the crowd actually knows," and size inversely to that.
+
+**Options.** A cascade produces a trend with low realized volatility until it breaks, then a jump. Implied volatility that is priced off the trend understates the jump; convexity bought ahead of a scheduled public signal is the direct expression of the fragility result.
+
+**Credit and deposits.** Run dynamics are cascades on a liability structure. Instruments exposed to concentrated, informed, fast-moving funding carry a tail that spread levels calibrated on calm periods do not price.
+
+**New issues.** Book coverage and first-day pops measure how quickly a cascade formed, not whether the issuer is worth the price. Welch's underpricing result says the discount is paid to start the cascade.
+
+**Funds and systematic flows.** Flow-following strategies are followers by design. They amplify cascades and are the last to leave; holding them through a reversal is holding the red dots.
+
+This is a model of how rational people behave with incomplete information. It is educational, not a forecast, and nothing here is investment advice.

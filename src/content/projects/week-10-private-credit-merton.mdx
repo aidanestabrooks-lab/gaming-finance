@@ -3,23 +3,42 @@ title: "Private Credit Through the Merton Lens"
 date: 2026-10-02
 week: 10
 tags: [CFA, Firms]
-summary: "Equity is a call option on the firm's assets struck at the face value of its debt. That one idea gives you a default probability, a credit spread, and an explanation of why levered borrowers take more risk when things go wrong. The model below is the Level II structural credit model calibrated to listed issuers from their market capitalization, realized equity volatility and reported debt, with the model spread set against the live high-yield and investment-grade index spreads."
+summary: "Equity is a call option on the firm's assets struck at the face value of its debt. That one idea gives you a default probability, a credit spread, and an explanation of why levered borrowers take more risk when things go wrong. The model below is the Level II structural credit model calibrated to listed issuers from their market capitalization, realized equity volatility and reported debt, with the model spread set against the live high-yield and investment-grade index spreads. It is the yardstick for a private credit market that passed $2 trillion in 2025, lost two borrowers to fraud in a single month, and spent 2026 rationing redemptions."
 takeaways:
   - "In the Merton model, the credit spread is a function of just three things: leverage, asset volatility, and time. Everything else is a label."
   - "Equity delta is the shareholders' incentive to add risk. As leverage rises and delta falls below one, equity holders gain from volatility that debt holders pay for. That is asset substitution, and covenants exist because of it."
-  - "Risk-neutral default probability overstates real-world default frequency. Use N(−d2) for pricing and the real-world distance to default for forecasting."
-  - "Private credit spreads that look generous against public high yield should be checked against the volatility of the underlying assets, not the headline leverage alone."
+  - "Risk-neutral default probability overstates real-world default frequency. Use N(−d2) for pricing and the real-world distance to default for forecasting; the gap between them is the credit risk premium."
+  - "Structural models explain why a firm defaults; reduced-form models fit when. Private credit marks are the structural model run without a stock price, which is why they are smooth until they are not."
+  - "First Brands and Tricolor in September 2025, and the 2026 wave of BDC redemption requests, were not failures of leverage arithmetic. They were failures of the volatility assumption: the assets turned out to be far more volatile than the marks implied."
 sources:
   - title: "CFA Institute: Credit Analysis Models (Level II fixed income)"
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/credit-analysis-models
   - title: "Merton, R. C. (1974). On the pricing of corporate debt: the risk structure of interest rates"
     url: https://www.jstor.org/stable/2978814
-  - title: "Federal Reserve: Financial Stability Report"
-    url: https://www.federalreserve.gov/publications/financial-stability-report.htm
+  - title: "Federal Reserve: Financial Stability Report, November 2025 (borrowing by businesses and households)"
+    url: https://www.federalreserve.gov/publications/november-2025-financial-stability-report-borrowing-by-business-and-households.htm
   - title: "FRED: ICE BofA US High Yield OAS (BAMLH0A0HYM2) and US Corporate OAS (BAMLC0A0CM)"
     url: https://fred.stlouisfed.org/series/BAMLH0A0HYM2
   - title: "Company 10-K and 10-Q filings via SEC EDGAR (total debt as reported)"
     url: https://www.sec.gov/edgar/search/
+  - title: "PitchBook: H1 2025 Global Private Debt Report (AUM reaches $2 trillion)"
+    url: https://pitchbook.brightspotcdn.com/a7/b9/cea7abbf0976b65c715b477a159f/h1-2025-global-private-debt-report.pdf
+  - title: "Alternative Credit Investor: Moody's tips private credit market for $3tn growth by 2028 (Jan 2025)"
+    url: https://alternativecreditinvestor.com/2025/01/21/moodys-tips-private-credit-market-for-3tn-growth/
+  - title: "BIS Bulletin No 128: AI disruption in private credit, exposure to software firms in BDCs (Jul 14, 2026)"
+    url: https://www.bis.org/publications/bulletin-128-ai-disruption-private-credit-exposure-software-firms-bdcs.pdf
+  - title: "Alternative Credit Investor: First Brands, private credit exposure limited but raises questions over lending standards (Oct 23, 2025)"
+    url: https://alternativecreditinvestor.com/2025/10/23/first-brands-private-credit-exposure-limited-but-raises-questions-over-lending-standards/
+  - title: "Financier Worldwide: First Brands enters Chapter 11"
+    url: https://www.financierworldwide.com/first-brands-enters-chapter-11
+  - title: "Bloomberg: Blue Owl BDC allows 17% redemptions as investors storm exit (Jan 7, 2026)"
+    url: https://www.bloomberg.com/news/articles/2026-01-07/blue-owl-bdc-allows-for-17-redemptions-as-investors-storm-exit
+  - title: "InvestmentNews: Blue Owl BDCs limit client buybacks after customers seek to cash out"
+    url: https://www.investmentnews.com/alternatives/blue-owl-bdcs-limit-client-buy-backs-after-customers-seek-to-cash-out/265984
+  - title: "LSTA: BDC Quarterly Wrap, 1Q26 (non-accruals)"
+    url: https://www.lsta.org/content/bdc-quarterly-wrap-1q26/
+  - title: "Penn Mutual Asset Management: The PIK picture, tracking non-cash income in BDC portfolios (Jun 2026)"
+    url: https://www.pennmutualam.com/market-insights-news/blogs/chart-of-the-week/2026-06-18-the-pik-picture-tracking-non-cash-income-in-bdc-portfolios
 ---
 import MertonModel from '../../components/models/MertonModel.astro';
 import { companies, companySnapshot, fred, shortDate } from '../../lib/data';
@@ -29,6 +48,15 @@ export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
 export const bn = (x) => `$${(x / 1e9).toFixed(x < 10e9 ? 2 : x < 100e9 ? 1 : 0)}B`;
 export const hy = fred.latest('BAMLH0A0HYM2');
 export const ig = fred.latest('BAMLC0A0CM');
+export const hyBp = Math.round(100 * hy);
+export const igBp = Math.round(100 * ig);
+export const rf1 = fred.latest('DGS1');
+export const byLev = [...levered].sort((a, b) => b.totalDebt / (b.marketCap + b.totalDebt) - a.totalDebt / (a.marketCap + a.totalDebt));
+export const mostLev = byLev[0];
+export const leastLev = byLev[byLev.length - 1];
+export const byVol = [...levered].sort((a, b) => b.equityVol1y - a.equityVol1y);
+export const mostVol = byVol[0];
+export const coverage = (s) => (s.interestExpenseTTM > 0 ? (s.operatingIncomeTTM / s.interestExpenseTTM).toFixed(1) : 'n/a');
 
 ## The setup
 
@@ -51,6 +79,48 @@ for the two unknowns, which is exactly the procedure the Level II reading descri
 
 <MertonModel id="merton" company="CHTR" />
 
+## Where the formula comes from
+
+Merton's 1974 insight was that Black and Scholes had already solved the credit problem a year earlier. If asset value follows geometric Brownian motion with volatility $\sigma_A$ and there is one debt maturity, the equity payoff at $T$ is $\max(V_T - D, 0)$: a European call.
+
+The debt follows from put-call parity. A risky zero-coupon bond is a riskless bond minus a put on the assets struck at $D$:
+
+$$
+B = D e^{-rT} - P, \qquad P = D e^{-rT} N(-d_2) - V\,N(-d_1)
+$$
+
+The put is the lenders' loss in the default states. Dividing through and taking logs gives the spread in closed form:
+
+$$
+s = y - r = -\frac{1}{T}\ln\!\left[ N(d_2) + \frac{V}{D e^{-rT}}\,N(-d_1) \right]
+$$
+
+Read the bracket. The first term is the probability of being repaid in full; the second is the recovery per unit of face. Spread rises with leverage ($D e^{-rT} / V$), with asset volatility, and, at low leverage, with time. At very high leverage the term structure inverts: a firm already near default is more likely to be rescued by time than destroyed by it. The model's spread curves against leverage are this formula drawn for three volatilities.
+
+## Distance to default, and which probability to use
+
+The quantity $d_2$ is the number of standard deviations the log of asset value sits above the log of the debt at maturity, after drift. In the risk-neutral measure the drift is $r$. In the real world the drift is the expected asset return $\mu$, so the forecasting version is
+
+$$
+\text{DD} = \frac{\ln(V/D) + (\mu - \tfrac{1}{2}\sigma_A^2)\,T}{\sigma_A\sqrt{T}}, \qquad \text{PD}_{\text{physical}} = N(-\text{DD})
+$$
+
+Two probabilities, two uses. The risk-neutral $N(-d_2)$ belongs in a price: with risk-free discounting it reproduces what a risk-averse market will pay. The physical $N(-\text{DD})$ belongs in a forecast of how often default happens. Whenever $\mu > r$ the physical probability is lower, and the ratio between the two is the credit risk premium. The model shows both; the gap widens as the μ slider rises.
+
+Commercial implementations, the Moody's KMV family being the best known, make two adjustments a candidate should recognize. They set the default point at short-term debt plus roughly half of long-term debt, because a firm with distant maturities can survive an asset value below total debt for a while. And they map the distance to default onto an empirical default frequency rather than using $N(-\text{DD})$, because asset returns have fatter tails than the lognormal assumption admits.
+
+## Structural versus reduced-form
+
+The Merton model is **structural**: default happens for a reason the model describes, assets falling below liabilities, and the inputs are balance-sheet and market quantities. Its strength is the link between equity and credit markets. Its weaknesses are well known: a single debt maturity, default only at that date, continuous and observable asset values, and spreads on short-dated investment-grade debt that are far too small, because a lognormal diffusion cannot jump a healthy firm into default in six months. That is the credit spread puzzle, and the one-year horizon on this page shows it.
+
+**Reduced-form** models (Jarrow-Turnbull, Duffie-Singleton) do not ask why. They treat default as a Poisson arrival with hazard rate $\lambda$, estimated from market spreads or ratings transitions, and price a bond as the expectation of its cash flows under that process. For a bond with recovery $R$ the approximation every credit desk uses is
+
+$$
+s \approx \lambda\,(1 - R)
+$$
+
+Reduced-form models fit the observed term structure of spreads, including the short end, and extend naturally to portfolios and credit derivatives. What they cannot do is tell you that a borrower is about to breach, because they have no balance sheet. Structural models explain and forecast; reduced-form models price and hedge. Private credit sits between the two: lenders underwrite structurally, on leverage and coverage, and mark reduced-form, on comparable public spreads. When the two disagree, the mark is slow to admit it.
+
 ## The borrowers
 
 <div class="table-wide">
@@ -67,28 +137,63 @@ for the two unknowns, which is exactly the procedure the Level II reading descri
 </table>
 </div>
 
-Equity volatility is the annualized standard deviation of the last 252 daily log returns. Debt is total debt as reported, treated as one zero-coupon claim at face; real capital structures have coupons, maturities spread over years, and leases, which is why the horizon slider matters. At one year almost every spread rounds to zero, because a year is not long enough for asset volatility to carry even a levered firm below its debt. At five years, closer to the average maturity of term debt, the differences between these issuers open up. For reference, the ICE BofA US High Yield index OAS was {hy.toFixed(0)} bp and the investment-grade index OAS {ig.toFixed(0)} bp on {shortDate(fred.asOf('BAMLH0A0HYM2'))}; the model reports its spread against both.
+Equity volatility is the annualized standard deviation of the last 252 daily log returns. Debt is total debt as reported, treated as one zero-coupon claim at face; real capital structures have coupons, maturities spread over years, and leases, which is why the horizon slider matters. At one year almost every spread rounds to zero, because a year is not long enough for asset volatility to carry even a levered firm below its debt. At five years, closer to the average maturity of term debt, the differences between these issuers open up. For reference, the ICE BofA US High Yield index OAS was {hyBp} bp and the investment-grade index OAS {igBp} bp on {shortDate(fred.asOf('BAMLH0A0HYM2'))}; the model reports its spread against both. The risk-free rate the model starts from is the one-year Treasury, {rf1.toFixed(2)}%.
+
+{mostLev.name} carries the highest market leverage in the group, {pct(mostLev.totalDebt / (mostLev.marketCap + mostLev.totalDebt))} of enterprise value in debt, with EBIT covering interest {coverage(mostLev)} times; {leastLev.name} carries the lowest, {pct(leastLev.totalDebt / (leastLev.marketCap + leastLev.totalDebt))}. {mostVol.name} has the most volatile equity at {pct(mostVol.equityVol1y)} a year. Leverage and volatility are different axes, and a moderately levered firm with volatile assets can price wider than a heavily levered one with stable ones. That is the point private credit underwriting most often misses.
 
 ## Reading the outputs
 
 **Spread versus leverage.** The three curves plot the implied spread against the ratio of the present value of debt to asset value, for asset volatilities of 15%, 25% and 40%. Two things stand out. First, the curves are convex: spread is nearly flat at low leverage and explodes past a threshold. Second, the volatility curves are far apart. At the same leverage, a borrower whose assets are twice as volatile can carry several times the spread. Private credit underwriting that focuses on leverage multiples and ignores asset volatility is reading the wrong axis. The dot marks the selected company, so you can see which curve it lives on.
 
-**Distance to default.** The risk-neutral $d_2$ discounts at the risk-free rate because it is built for pricing. For forecasting defaults you want the real-world version, which replaces $r$ with the expected asset return $\mu$:
-
-$$
-\text{DD} = \frac{\ln(V/D) + (\mu - \tfrac{1}{2}\sigma_A^2)\,T}{\sigma_A\sqrt{T}}
-$$
-
-The model shows both. The real-world default probability is lower than the risk-neutral one whenever $\mu > r$, which is the normal case, and the gap is the credit risk premium.
+**Distance to default.** The risk-neutral $d_2$ discounts at the risk-free rate because it is built for pricing. For forecasting defaults you want the real-world version, which replaces $r$ with the expected asset return $\mu$. The model shows both. The real-world default probability is lower than the risk-neutral one whenever $\mu > r$, which is the normal case, and the gap is the credit risk premium.
 
 **Equity delta.** $\partial E/\partial V = N(d_1)$. At low leverage delta is near one: shareholders own the assets in all but name. As leverage rises, delta falls, and shareholders become option holders. Option holders like volatility. That is why a distressed borrower's management will take the long-shot acquisition or the risky pivot: equity gains from the upside, debt absorbs the downside. Covenants, collateral, and lender step-in rights are the mechanism design that pushes back. Switch between the hyperscalers and the levered names and watch delta move.
 
 **Equity volatility.** The identity $\sigma_E = N(d_1)\,V\sigma_A / E$ links the unobservable asset volatility to the observable equity volatility. The calibration row checks it: the model's $\sigma_E$ at the solved $V$ and $\sigma_A$ should reproduce the observed figure. Untick the calibration box and the sliders come free, so you can ask what the spread would be if the same balance sheet carried different asset risk. For a private borrower you do not have $\sigma_E$ at all, which is one reason private credit marks are smoother than they should be.
 
+## The private credit story
+
+The market the model is a yardstick for has grown faster than the tools for measuring it. PitchBook put global private debt assets under management at \$2 trillion by mid-2025, more including the perpetual vehicles sold to individuals; Moody's projected in January 2025 that the market would roughly double from \$1.5 trillion in 2023 to \$3 trillion by 2028. Business development companies, the publicly reporting corner of the market, numbered about 170 at the end of 2025 with some \$550 billion of assets, according to the Bank for International Settlements, and originate about a fifth of US direct loans. The Federal Reserve's November 2025 Financial Stability Report noted that the average interest coverage ratio at issuance for private credit borrowers remained low, at about 2 times.
+
+Three features of these loans matter for the model. They are floating-rate, so coverage fell as policy rates rose. They are increasingly **payment-in-kind**: PitchBook data cited by Penn Mutual put PIK at about 8% of BDC interest income in early 2026, interest added to principal rather than paid in cash. In Merton terms, PIK raises $D$ every quarter while the lender reports income, and the BIS uses the PIK rate as its proxy for cash-flow distress. And they are **marked by the lender**, quarterly, against models rather than trades. The LSTA reports that the weighted-average non-accrual rate across public and private BDCs rose to 1.99% in the first quarter of 2026 from 1.42% a quarter earlier.
+
+The stress arrived in September 2025 in two borrowers that were not, by headline leverage, obviously the weakest. Tricolor, a subprime auto lender, collapsed in the first half of the month. First Brands, an auto-parts supplier with total liabilities reported between \$10 billion and \$50 billion, entered Chapter 11 at the end of it, with Jefferies disclosing \$715 million of exposure through a receivables fund and UBS about \$500 million. Both involved alleged double-pledging of receivables, and both had been carried near par until weeks before. Direct BDC exposure to First Brands was small, \$237 million across 15 of 166 BDCs by iCapital's count, and the Fed called the two bankruptcies isolated. The point for the model is different: the asset value $V$ was wrong by a lot, because the collateral did not exist. In the formula that is a jump in $\sigma_A$, the one input a lender who sees no stock price cannot observe.
+
+The 2026 chapter was about the liability side of the funds. Non-traded BDCs sold to individuals offer quarterly redemptions, typically capped at 5% of net assets. In January 2026 Blue Owl Technology Income Corp. received requests far above that and allowed about 17% of net assets, roughly \$685 million, to leave; by the first quarter requests reached about 41% of shares and Blue Owl returned to the 5% cap. The trigger was the software book. The BIS estimates BDCs have lent roughly \$115 to \$140 billion to software companies, a fifth to a quarter of all their loans, a quarter of it held by non-traded vehicles, and found that spreads on software loans had converged with every other sector by late 2025 despite the sector's new exposure to generative-AI disruption. Lenders were pricing one $\sigma_A$ for assets the public market had started to price with another, and the investors who could see the public market asked for their money.
+
 ## The game inside the model
 
 Lender and borrower are playing a game the Merton model makes explicit. The borrower chooses $\sigma_A$ after the loan is made. The lender prices the loan on the $\sigma_A$ it expects. If the lender cannot constrain volatility, the borrower's best response once in distress is to raise it, and the lender's best response ex ante is to charge for that possibility. Covenant-lite structures remove the constraint and the pricing should reflect it. Where it does not, the mispricing sits with the lender, which in private credit is increasingly a retail-facing fund.
 
+PIK toggles are a move in this game. A borrower allowed to capitalize interest it cannot pay has been granted a larger strike on a longer-dated option: equity delta falls, the incentive to gamble rises, and the lender reports the accrual as income. The mark that is supposed to stop this is set by the same lender, using its own volatility assumption.
+
+## How to use the model
+
+**Walk the term structure.** Load the most levered name and set the horizon to 1 year, then 3, 5 and 10. The spread rises steeply and then flattens or turns over, the hump the closed form predicts. Compare the five-year spread with the live high-yield OAS of {hyBp} bp; if the model is wider than the index, the market is assuming lower asset volatility than the stock implies or expecting deleveraging before maturity.
+
+**Change the asset volatility alone.** Untick the calibration box and move $\sigma_A$ from 15% to 40% with everything else fixed. The spread multiplies, the risk-neutral default probability climbs, and equity delta falls. This is the experiment a private lender cannot run with observed data and the one that matters most.
+
+**Add debt with calibration on.** Re-tick the box and raise $D$ by a quarter; the model re-solves $V$ and $\sigma_A$ from the unchanged market data and the spread jumps more than proportionally, because the leverage curve is convex. Then raise μ from 7% to 12% and watch the real-world default probability fall while the risk-neutral one does not move. That gap is the compensation for bearing the risk, and whether it is enough is a question about μ that no spread can answer on its own.
+
+## What to watch
+
+- **Non-accruals and PIK share in public BDC filings.** The only quarterly, audited window into direct-lending credit quality. Rising PIK with stable marks is the model being overruled by the marker.
+- **Redemption requests at non-traded BDCs.** Requests above the 5% quarterly cap are investors with outside information voting on the marks.
+- **The high-yield OAS, {hyBp} bp today.** When the public market widens and private marks do not, the private premium has become a lag rather than a reward.
+- **Software exposure.** The BIS's one-fifth-to-one-quarter share is concentrated, and the sector's asset volatility is being re-priced in public markets first.
+- **Bank credit lines to private credit funds.** Back leverage on the fund is leverage on top of leverage in the borrower: $D$ on both floors of the structure.
+- **Equity volatility of listed levered issuers.** The free, daily $\sigma_E$ that private borrowers do not supply.
+
 ## What this means for investors
 
 If you hold private credit through a fund, the questions to ask are the model's inputs: what is the asset volatility of the borrowers, not just their leverage; how far is the typical borrower from the point where the spread curve goes vertical; and what mechanisms stop a distressed borrower from doing what option holders rationally do. The spread you are paid is only generous relative to the right answers. The public issuers on this page are the yardstick: their equity prices tell you what the market thinks their assets are worth and how much they move, and the model turns that into the spread a lender should demand. A private loan to a similar balance sheet at a lower spread is not a bargain for the lender.
+
+By instrument, for education rather than advice:
+
+- **Non-traded BDCs and interval funds.** The yield is a cash spread plus an accruing PIK component, and the net asset value is a mark. Read the PIK share, the non-accrual rate and the redemption history before the yield; the 5% gate means the exit price is the next mark, not the last one.
+- **Listed BDCs.** They trade daily, so their discount to NAV is a public verdict on private marks: the market applying a higher $\sigma_A$ than the funds use.
+- **High-yield bonds and leveraged loans.** If private spreads are tighter than public spreads on similar leverage, as the BIS found for software, the public market is the cheaper way to own the same risk.
+- **Equity of levered issuers.** Shareholders are long the call. When delta is low the stock is a volatility bet, and the Merton lens tells you how much of the price is time value.
+- **Bank shares.** First Brands and Tricolor were bank losses as much as private credit losses; the channel is lending to nonbank lenders.
+
+The model is fifty years old and has one lesson that has not aged: a credit spread is a price for volatility and leverage together. Any market that quotes the second and hides the first will, eventually, be repriced by the first.

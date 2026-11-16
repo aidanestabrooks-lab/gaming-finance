@@ -3,28 +3,58 @@ title: "Pension De-risking: Immunization and the Twist You Didn't Hedge"
 date: 2026-10-30
 week: 14
 tags: [CFA, Markets]
-summary: "Corporate pension plans reached their best funded status in a generation and are locking it in with liability-driven portfolios. Matching duration protects against parallel rate moves. It does not protect against a twist. The model builds a bullet and a barbell against the same liability and stresses both, so the structural risk Level III warns about is on the screen."
+summary: "US corporate pension plans are better funded than at any point since 2007 (the Milliman 100 stood at 112.4% funded at the end of October 2026) and are locking it in with liability-driven portfolios and record annuity buy-ins. Matching duration protects against parallel rate moves. It does not protect against a twist, and it does not protect against a margin call, as the UK's September 2022 gilt crisis demonstrated. The model builds a bullet and a barbell against the same liability, discounts both on today's bootstrapped Treasury curve, and stresses them so the structural risk Level III warns about is on the screen."
 takeaways:
-  - "Immunization requires matching the present value and the Macaulay duration of the liability, with asset convexity at least as large as liability convexity. That protects against a one-time parallel shift and nothing else."
-  - "A barbell has more convexity than a bullet of the same duration, so it wins on large parallel shifts. It also has more cash-flow dispersion, so it loses on curve twists. Convexity is not free."
+  - "Immunization requires matching the present value and the Macaulay duration of the liability, with asset convexity at least as large as liability convexity. That protects against a one-time parallel shift and nothing else; the portfolio must be rebalanced as time passes and yields move."
+  - "A barbell has more convexity than a bullet of the same duration, so it wins on large parallel shifts. It also has more cash-flow dispersion, so it loses on curve twists. Convexity and dispersion are the same quantity seen from two sides."
   - "Structural risk is the exposure to non-parallel shifts. Minimizing dispersion around the liability's cash flows is the Level III prescription, which is why bullets and cash-flow matching dominate real de-risking programs."
-  - "Funded status is a spread trade between a long-duration liability and whatever the assets are. The twist in the curve is the risk most sponsors have never seen on a report."
+  - "The UK LDI crisis of September 2022 was a liquidity failure inside a duration hedge: 30-year gilt yields rose about 160 basis points in a few days, leveraged LDI funds faced collateral calls they could not meet, and the Bank of England had to buy gilts to stop a fire sale. Leverage turns a hedge into a position with a margin account."
+  - "Funded status is a spread trade between a long-duration liability and whatever the assets are. Sponsors now in surplus are buying annuities and extending hedge ratios; the twist in the curve is the risk most of their reports have never shown."
 sources:
   - title: "CFA Institute: Liability-Driven and Index-Based Strategies (Level III)"
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/liability-driven-index-based-strategies
-  - title: "Milliman: Pension Funding Index"
-    url: https://www.milliman.com/en/products/pension-funding-index
+  - title: "Milliman: Pension Funding Index, November 2026 edition (October 31, 2026 data)"
+    url: https://www.milliman.com/en/insight/pension-funding-index-november-2026
+  - title: "Milliman: Corporate pension funded ratio rises to 103.8% for fiscal year 2025 (2026 Pension Funding Study)"
+    url: https://secure.businesswire.com/news/home/20260421401759/en/Milliman-analysis-Corporate-pension-funded-ratio-rises-to-103.8-for-fiscal-year-2025-second-consecutive-year-of-surplus
+  - title: "Mercer: S&P 1500 pension funded status increased by one percent in September (2026)"
+    url: https://www.mercer.com/en-us/about/newsroom/s-p-1500-pension-funded-status-increased-by-one-percent-in-september/
+  - title: "LIMRA: U.S. single premium pension risk transfer product sales jump 132% in the fourth quarter of 2025"
+    url: https://limra.com/en/newsroom/news-releases/2026/limra-u.s.-single-premium-pension-risk-transfer-product-sales-jump-132-in-the-fourth-quarter-of-2025
+  - title: "LIMRA: U.S. single premium pension risk transfer sales leap 14% to $51.8 billion in 2024"
+    url: https://www.limra.com/en/newsroom/news-releases/2025/limra-u.s.-single-premium-pension-risk-transfer-sales-leap-14-to-$51.8-billion-in-2024/
+  - title: "Bank of England: Letter from Sir Jon Cunliffe to the Treasury Committee on LDI, 5 October 2022"
+    url: https://www.bankofengland.co.uk/-/media/boe/files/letter/2022/october/letter-from-jon-cunliffe-ldi-5-october-2022
+  - title: "Bank Underground: Lifting the lid on a liquidity crisis (gilt purchases from LDI funds, 2023)"
+    url: https://bankunderground.co.uk/2023/07/18/lifting-the-lid-on-a-liquidity-crisis/
+  - title: "House of Lords Industry and Regulators Committee: Leveraged LDI strategies worsened September 2022 turmoil (Feb 2023)"
+    url: https://ifamagazine.com/leveraged-ldi-strategies-worsened-september-2022-financial-turmoil-says-lords-committee/
+  - title: "CNBC: Bank of England says pension funds were hours from disaster before it intervened (Oct 6, 2022)"
+    url: https://www.cnbc.com/2022/10/06/bank-of-england-says-pension-funds-were-hours-from-disaster-before-it-intervened.html
+  - title: "Bank of England staff paper: LDI minimum resilience, recommendation and explainer (Mar 2023, 250bp buffer)"
+    url: https://www.bankofengland.co.uk/financial-policy-summary-and-record/2023/bank-staff-paper-ldi-minimum-resilience
   - title: "FRED: Treasury constant-maturity yields (DGS1–DGS30), Board of Governors H.15"
     url: https://fred.stlouisfed.org/series/DGS30
 ---
 import Immunization from '../../components/models/Immunization.astro';
-import { parYield, curveAsOf, shortDate } from '../../lib/data';
+import { parYield, curveAsOf, fred, shortDate } from '../../lib/data';
 
 export const asOf = shortDate(curveAsOf());
 export const y2 = parYield(2).toFixed(2);
 export const y10 = parYield(10).toFixed(2);
 export const y30 = parYield(30).toFixed(2);
 export const longSlope = (100 * (parYield(30) - parYield(2))).toFixed(0);
+export const y5 = parYield(5).toFixed(2);
+export const y20 = parYield(20).toFixed(2);
+export const tenThirty = (100 * (parYield(30) - parYield(10))).toFixed(0);
+export const twentyThirty = Math.abs(100 * (parYield(30) - parYield(20))).toFixed(0);
+export const longShape = parYield(30) < parYield(20) ? 'inverted between twenty and thirty years' : parYield(30) > parYield(20) ? 'still rising between twenty and thirty years' : 'flat between twenty and thirty years';
+export const fedMid = ((fred.latest('DFEDTARU') + fred.latest('DFEDTARL')) / 2).toFixed(3);
+export const policyGap = (100 * (parYield(30) - (fred.latest('DFEDTARU') + fred.latest('DFEDTARL')) / 2)).toFixed(0);
+export const dgs30Prior = fred.obs('DGS30').slice(-253)[0];
+export const dgs30Chg = Math.round(100 * (fred.latest('DGS30') - dgs30Prior[1]));
+export const dgs30Dir = dgs30Chg >= 0 ? 'risen' : 'fallen';
+export const tenThirtyDir = parYield(30) >= parYield(10) ? 'above' : 'below';
 
 ## The setup
 
@@ -48,6 +78,20 @@ The spot rates come from the standard bootstrap of the par curve: the $m$-year p
 
 Classical immunization sets asset $PV$ and $D$ equal to the liability's and asset convexity above it. The barbell weights are solved from two equations (value match, duration match) in two unknowns. The bullet is the single par bond whose duration is nearest the liability's. Both satisfy the first two conditions. The "convexity gap" box shows that only the barbell satisfies the third with room to spare.
 
+The logic goes back to Redington in 1952 and was made rigorous for non-flat curves by Fisher and Weil in 1971. Think of the surplus $S = PV_A - PV_L$ as a function of a parallel shift $\Delta y$ and expand it to second order:
+
+$$
+\Delta S \approx -(D_A PV_A - D_L PV_L)\,\Delta y + \tfrac{1}{2}\left(C_A PV_A - C_L PV_L\right)(\Delta y)^2
+$$
+
+With values and durations matched the first term vanishes. The second is positive whenever asset convexity exceeds liability convexity, so the surplus rises for a shift in either direction. That is the whole theorem, and its assumptions are the whole problem: one shift, parallel, instantaneous. The money version of duration is **basis point value**, $BPV = D_{\text{mod}} \times PV \times 0.0001$, and the matching condition is usually stated as $BPV_A = BPV_L$. For a single liability, Macaulay duration is the horizon at which price risk and reinvestment risk offset. For multiple liabilities one condition is added: asset cash-flow dispersion must be at least as large as the liabilities', but not much larger.
+
+## Immunization is a process, not a trade
+
+Even against parallel shifts, a matched portfolio drifts. As time passes the liability and the bullet shorten together, but a barbell's two bonds age at different rates and last year's weights no longer match. A change in the level of yields changes every duration as well. The textbook strategy therefore requires rebalancing, and the Level III reading is explicit that its cost is part of the cost of immunization.
+
+The alternative that needs no rebalancing is **cash-flow matching**: buy a bond whose principal and final coupon meet the last liability, then work backward. Duration and convexity match automatically and there is no structural risk, because there is nothing left to twist. The price is cost and inflexibility: bonds do not exist at every maturity in the sizes needed, and surplus assets cannot be deployed. Most real programs sit between the two, cash-flow matching the next several years of benefits, duration matching the rest, and hedging the residual with swaps or futures sized by BPV.
+
 ## Parallel shifts
 
 Drag the parallel-shift slider with the twist at zero. The right-hand chart shows surplus against the shift. Both portfolios stay near zero surplus for small shifts, which is immunization doing its job. For large shifts, the barbell's surplus curves upward on both sides: its higher convexity means it gains more when yields fall and loses less when they rise. This is the textbook argument for convexity, and if parallel shifts were the only risk, the barbell would be the clear choice.
@@ -58,6 +102,59 @@ Now set the parallel shift to zero and drag the twist. The twist steepens or fla
 
 This is **structural risk**: the exposure of a duration-matched portfolio to changes in the shape of the curve. The Level III reading's remedy is to minimize the dispersion of asset cash flows around the liability's, which, taken to the limit, is cash-flow matching. Convexity and dispersion are two sides of one coin; you cannot buy the first without the second.
 
+The identity behind that sentence is exact. For cash flows discounted at a flat yield $y$,
+
+$$
+C = \frac{D^2 + D + \text{Dispersion}}{(1+y)^2}, \qquad \text{Dispersion} = \frac{1}{PV}\sum_t \frac{(t - D)^2\,CF_t}{(1+y)^t}
+$$
+
+Two portfolios with the same duration differ in convexity only through dispersion, the variance of cash-flow timing around the duration. A barbell has large dispersion, so it has large convexity and gains on any parallel move; and its cash flows sit far from the pivot, so it loses on any twist that moves the two ends apart. Choosing convexity is choosing dispersion. The Level III prescription to minimize dispersion is a statement that twists are more common than large parallel shocks, which the record supports: curves steepen in easing cycles and flatten in tightening cycles far more often than they shift as a block.
+
+Today's curve carries that history in its shape: the thirty-year sits {Math.abs(Number(tenThirty))} basis points {tenThirtyDir} the ten-year and the curve is {longShape}, by {twentyThirty} basis points. Against a federal funds target midpoint of {fedMid}%, the thirty-year yield of {y30}% is {policyGap} basis points away, and it has {dgs30Dir} {Math.abs(dgs30Chg)} basis points over the past year. Those are the distances the twist slider is working with.
+
+## The UK, September 2022: the hedge that needed a margin account
+
+The clearest demonstration that duration matching can fail at the level of the whole system came from the market where it was practiced most thoroughly. UK defined-benefit schemes, pushed by accounting rules to discount liabilities at gilt yields, had adopted **liability-driven investment** on a national scale: more than £1 trillion by the Bank of England's count, around £1.4 to £1.5 trillion by press and parliamentary estimates, covering roughly 60% of the country's 5,131 DB schemes. To hedge long liabilities while still holding growth assets, schemes used leverage through repo and swaps in pooled LDI funds, the most aggressive buying up to £7 of gilt exposure per £1 of capital according to evidence to the House of Lords. The hedges were duration hedges. They were also positions with collateral calls.
+
+On September 23, 2022 the government announced unfunded tax cuts. Long gilt yields rose about 30 basis points that day and around 50 on Monday the 26th, leaving 30-year yields more than 80 basis points above Friday morning's level; by Tuesday evening they had risen a further 67 basis points from that morning. The Bank's deputy governor told Parliament that the period saw two daily increases of more than 35 basis points against a previous record since 2000 of 29; that the four-day rise was more than twice the largest since 2000; and that the 30-year yield rose about 160 basis points in a few days from around 1.2% at the start of the year. The intraday range on September 28 was 127 basis points, larger than the annual range in all but four of the previous 27 years. Stress tests had assumed a maximum move of 100.
+
+The mechanics were those of a leveraged duration hedge. Falling gilt prices triggered collateral calls on repo and swap positions; funds met them by selling gilts, or by asking their pension-scheme investors for cash, which the schemes raised by selling gilts. Fund managers told the Bank that multiple pooled LDI funds were about to fall into negative net asset value, and that the forced sales implied were at least £50 billion of long gilts in a market trading about £12 billion a day. On September 28 the Bank announced temporary purchases of up to £5 billion a day for 13 days, a £65 billion envelope. Thirty-year yields fell more than 100 basis points that day. The Bank ended up buying about £19 billion, most of it from LDI funds and pension schemes, and had sold it all back by January 2023.
+
+The lesson for the model is precise. The schemes' funded status, measured as the model measures it, mostly *improved* through the episode, because liabilities fell faster than hedged assets. What failed was the implementation: the assets were partly synthetic, the synthetic part had daily margin, and the margin had to be paid in cash the schemes did not hold. The surplus chart in the panel has no axis for liquidity. Any program that uses derivatives or repo to reach the liability's duration has written a liquidity requirement into its hedge; UK regulators now require pooled LDI funds to withstand at least a 250-basis-point yield shock.
+
+## US corporate pensions: surplus, and what sponsors are doing with it
+
+The US system has arrived at the opposite problem. After two decades of deficits, rising discount rates and strong markets pushed the Milliman 100 index of the largest corporate plans to its first fiscal-year-end surplus since 2007 in 2024 and a 103.8% funded ratio for fiscal 2025. The monthly index reached 108.1% at the end of 2025 and 112.4% at October 31, 2026, with \$1.274 trillion of assets against a \$1.133 trillion projected benefit obligation, down from 114.5% a month earlier when the discount rate fell 27 basis points to 6.20%. Mercer's S&P 1500 estimate stood at 113% at the end of September 2026. A two-point move in a month on a 27-basis-point rate change is the duration gap of the system made visible, and it is why sponsors in surplus are extending their hedges.
+
+The other response is to transfer the liability. **Pension risk transfer** is the purchase of a group annuity from an insurer, a buy-out that removes the obligation or a buy-in that keeps it on the balance sheet but hedges it fully. LIMRA reports US single-premium PRT sales of \$51.8 billion in 2024, less than 1% below the 2022 record. In 2025 buy-outs fell 35% to \$31.3 billion while buy-ins rose 372% to \$17.5 billion, the largest buy-in year on record, and fourth-quarter volume of \$28 billion was up 132% from a year earlier. Sponsors are locking in rates ahead of plan terminations, and insurers are taking on the duration, convexity and structural risk this page describes.
+
+A buy-in is cash-flow matching outsourced; a buy-out ends the game. Everything in between is the model on this page with real cash flows, and its structural risk is live.
+
+## How to use the model
+
+**See immunization work, then fail.** Leave the twist at zero and sweep the parallel shift from −300 to +300 basis points: both surplus curves pass through zero at the center and the barbell's sits above the bullet's at the extremes. Then set the shift to zero and sweep the twist from −150 to +150 basis points per decade. The barbell's surplus swings far more than the bullet's. A portfolio that wins the first test and loses the second is the textbook result, reproduced on today's curve.
+
+**Shrink the dispersion.** Move the barbell's long-bond maturity from 30 years down to 15 and its short-bond maturity up from 2 to 8, re-reading the twist chart at each step. As the two bonds converge on the liability's duration the barbell turns into a bullet: its convexity advantage disappears and so does its twist exposure. The maturity pair at which the twist loss becomes tolerable is the dispersion budget a Level III answer would recommend.
+
+**Change the liability.** Push payments-end from 20 years to 30, or payments-start from 5 to 1. A longer tail raises the liability's duration and convexity and widens the barbell's structural risk; an earlier start does the opposite. Structural risk is a property of shape, not size.
+
+## What to watch
+
+- **The 2s30s and 10s30s slopes.** Twist is the risk this page is about, and those two spreads, {longSlope} and {tenThirty} basis points today, are its most direct measure. Policy expectations move the front end; supply and term premium move the back.
+- **The Milliman and Mercer monthly indexes.** A move of two funded-ratio points in a month without a comparable change in assets is the curve, not the market.
+- **Pension risk transfer volumes.** Rising buy-in and buy-out volume is sponsors converting structural risk into insurer credit risk.
+- **Margin lines in hedging programs.** Any program hedging with futures or swaps has a daily margin line that should be tested against a September 2022-sized move.
+- **Long yields against hedge ratios.** At thirty-year yields of {y30}%, sponsors above full funding are raising hedge ratios; a hedged plan has sold its upside to rates, and the question is whether it also sold its twist exposure.
+
 ## What this means for investors
 
 If you sponsor, advise, or simply hold the equity of a company with a large pension, ask how its LDI program is built. A duration-matched portfolio of long Treasuries and short credit is a barbell. It looks immunized on the actuary's report and it is immunized against the one shock the report measures. Against the shock that typically accompanies a policy pivot, the twist, it is not. For an investor in long-duration bonds generally, the lesson is the same in miniature: duration tells you about level; it is silent about shape.
+
+By instrument, for education rather than advice:
+
+- **Equity of plan sponsors.** The pension is a leveraged bond position inside the company. Read the discount rate, the hedge ratio and the asset allocation in the 10-K's pension note; a sponsor at 112% funded with a 90% hedge ratio and a barbell is less de-risked than the headline says.
+- **Long Treasuries and STRIPS.** The raw material of every LDI program and PRT insurer's general account; demand is concentrated in the 20- to 30-year sector, which reacts violently when the hedging flow reverses, as it did in the UK.
+- **Long investment-grade corporates.** Sponsors discount liabilities at high-quality corporate yields, so long corporates are the first thing a de-risking plan buys, a bid for duration that has little to do with the issuers' fundamentals.
+- **Bond funds held personally.** Two funds with the same duration can have very different cash-flow dispersion and will behave differently in a steepening. Where, along the curve, is the money actually sitting?
+
+The panel is a toy pension. The arithmetic is not. Every number in it except the liability schedule is observed, and the structural risk it shows is the one the best-funded pension system in a generation is choosing how to carry.

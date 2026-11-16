@@ -3,40 +3,71 @@ title: "60/40 After the Correlation Regime Change"
 date: 2026-10-16
 week: 12
 tags: [CFA, Markets]
-summary: "For two decades bonds hedged equities because their returns were negatively correlated. In an inflation-driven regime the sign flips, and the efficient frontier moves. The optimizer below is the Level III mean-variance engine estimated from five years of actual ETF returns, with the stock-bond correlation as a dial that starts at today's reading: watch the tangency portfolio, the capital market line, and the risk contributions of a 60/40 change with it."
+summary: "For two decades bonds hedged equities because their returns were negatively correlated. In an inflation-driven regime the sign flips, and the efficient frontier moves. This piece covers mean-variance theory as the CFA Level III curriculum teaches it, the research on why the stock-bond correlation changes sign, the 2022 episode in which both legs fell together and risk parity suffered its worst year, and what today's curve and correlation say about the regime. The optimizer is the Level III engine estimated from five years of actual ETF returns, with the stock-bond correlation as a dial that starts at today's reading."
 takeaways:
-  - "The diversification benefit of bonds is a function of the stock-bond correlation, not of bonds' own volatility. When the correlation turns positive, 60/40's risk is nearly all equity risk."
-  - "Risk contribution, not capital weight, is what you are allocating. A 60/40 portfolio in a negative-correlation regime is about 90% equity risk; in a positive regime it is closer to 100%."
+  - "The diversification benefit of bonds is a function of the stock-bond correlation, not of bonds' own volatility. When the correlation turns positive, bonds stop subtracting risk and start adding it, and 60/40 becomes one bet on growth with a duration kicker."
+  - "The sign of the correlation is set by which macro shock dominates. Growth shocks move stocks and bonds in opposite directions; inflation shocks move them together. The 2022 episode was an inflation shock, and 60/40 lost roughly a sixth of its value."
+  - "Risk contribution, not capital weight, is what you are allocating. In a negative-correlation regime bonds contribute negative variance to 60/40 and the equity sleeve accounts for more than all of the risk; in a positive regime bonds become a second source of the same risk and portfolio volatility rises. Risk parity levers the bond sleeve, which is why it fell further than 60/40 in 2022."
   - "The tangency portfolio tilts toward whatever is uncorrelated. In a positive stock-bond regime that is gold and, with the right inputs, short-duration credit."
   - "Expected returns dominate the optimizer and are the least knowable input. Check sensitivity before acting on any allocation shift."
 sources:
   - title: "CFA Institute: Principles of Asset Allocation (Level III)"
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/principles-asset-allocation
-  - title: "AQR: The stock/bond correlation"
-    url: https://www.aqr.com/Insights/Research
+  - title: "Brixton, Brooks, Hecht, Ilmanen, Maloney & McQuinn (2023). A Changing Stock-Bond Correlation: Drivers and Implications. Journal of Portfolio Management (AQR)"
+    url: https://www.aqr.com/Insights/Research/Journal-Article/A-Changing-Stock-Bond-Correlation
+  - title: "Campbell, Pflueger & Viceira (2020). Macroeconomic Drivers of Bond and Equity Risks. Journal of Political Economy (NBER w20070)"
+    url: https://www.nber.org/papers/w20070
+  - title: "CAIA Association: risk parity in 2022 (HFR Risk Parity index and All Weather returns)"
+    url: https://caia.org/node/7312
+  - title: "Fortune: Bridgewater All Weather lost 22% in 2022; investors pull from risk parity"
+    url: https://fortune.com/2024/04/23/lackluster-returns-ray-dalio-investing-strategy-investors-pull-billions/
+  - title: "Motley Fool: 2022 was the worst year since 1937 for the 60/40 portfolio"
+    url: https://www.fool.com/investing/2023/01/26/2022-was-the-worst-year-since-1937-for-this-invest
   - title: "Yahoo Finance: adjusted daily closes for SPY, EFA, IEF, LQD, GLD"
     url: https://finance.yahoo.com/
-  - title: "FRED: 10-year Treasury yield, 3-month bill, ICE BofA US Corporate OAS, 10-year breakeven inflation"
+  - title: "FRED: 10-year and 2-year Treasury yields, 3-month bill, ICE BofA US Corporate OAS, 10-year breakeven inflation, CPI"
     url: https://fred.stlouisfed.org/
 ---
 import Frontier from '../../components/models/Frontier.astro';
-import { assetStats, rollingCorr, fred, shortDate } from '../../lib/data';
+import { assetStats, rollingCorr, fred, prices, shortDate } from '../../lib/data';
 
 export const st = assetStats(['SPY', 'EFA', 'IEF', 'LQD', 'GLD'], 5);
 export const roll = rollingCorr('SPY', 'IEF', 252, 21);
 export const rhoNow = roll[roll.length - 1][1];
 export const rho2022 = (() => { const xs = roll.filter(([d]) => d >= '2022-06-01' && d <= '2023-06-30').map(([, c]) => c); return Math.max(...xs); })();
+export const rho2022Date = roll.filter(([d]) => d >= '2022-06-01' && d <= '2023-06-30').reduce((a, b) => (b[1] > a[1] ? b : a))[0];
 export const rhoPre = (() => { const xs = roll.filter(([d]) => d < '2021-01-01').map(([, c]) => c); return xs.reduce((a, b) => a + b, 0) / xs.length; })();
+export const rhoMin = roll.reduce((a, b) => (b[1] < a[1] ? b : a));
 export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
 export const y10 = fred.latest('DGS10');
+export const y2 = fred.latest('DGS2');
+export const slope = y10 - y2;
+export const bill = fred.latest('DGS3MO');
+export const bei = fred.latest('T10YIE');
+export const cpi = fred.yoy('CPIAUCSL');
+export const oas = fred.latest('BAMLC0A0CM');
+export const sS = st.annVol[0];
+export const sB = st.annVol[2];
+export const volP = (rho) => Math.sqrt(0.36 * sS * sS + 0.16 * sB * sB + 0.48 * rho * sS * sB);
+export const rcEq = (rho) => (0.36 * sS * sS + 0.24 * rho * sS * sB) / volP(rho) ** 2;
+export const calRet = (t, y) => { const a = prices.get(t); const i0 = a.dates.findIndex((d) => d >= `${y}-01-01`) - 1; const i1 = a.dates.findIndex((d) => d >= `${y + 1}-01-01`) - 1; return a.close[i1] / a.close[i0] - 1; };
+export const spy22 = calRet('SPY', 2022);
+export const ief22 = calRet('IEF', 2022);
+export const lqd22 = calRet('LQD', 2022);
+export const gld22 = calRet('GLD', 2022);
+export const mix22 = 0.6 * spy22 + 0.4 * ief22;
 
 ## The setup
 
 Five asset classes, each proxied by a liquid ETF: US equity (SPY), international developed equity (EFA), 7–10 year Treasuries (IEF), investment-grade credit (LQD) and gold (GLD). Their volatilities and the full correlation matrix are estimated from {st.n.toLocaleString()} daily returns between {shortDate(st.start)} and {shortDate(st.end)}, and the site re-estimates them on every build. Equities correlate strongly with each other ({st.corr[0][1].toFixed(2)} between SPY and EFA); Treasuries and investment-grade credit correlate strongly with each other ({st.corr[2][3].toFixed(2)}); gold is weakly related to everything. The one correlation that defines the regime is the stock-bond pair, and it is on a slider that starts at its latest one-year reading of {rhoNow.toFixed(2)}.
 
-Expected returns are the input nobody observes, so the model states its method. The default is yield-based: the 10-year Treasury yield of {y10.toFixed(2)}% as the bond return, that yield plus a 4.5% premium for US equity, plus the investment-grade index spread for credit, and the 10-year breakeven inflation rate for gold. A toggle swaps in the trailing five-year compound returns instead, which for this window were {pct(st.annRet[0])} for US equity, {pct(st.annRet[2])} for Treasuries and {pct(st.annRet[4])} for gold. The two methods disagree by design; that disagreement is the point of the last section.
+Expected returns are the input nobody observes, so the model states its method. The default is yield-based: the 10-year Treasury yield of {y10.toFixed(2)}% as the bond return, that yield plus a 4.5% premium for US equity, plus the investment-grade index spread of {oas.toFixed(2)} points for credit, and the 10-year breakeven inflation rate of {bei.toFixed(2)}% for gold. A toggle swaps in the trailing five-year compound returns instead, which for this window were {pct(st.annRet[0])} for US equity, {pct(st.annRet[2])} for Treasuries and {pct(st.annRet[4])} for gold. The two methods disagree by design; that disagreement is the point of the sensitivity section.
 
-The portfolio problem is the Level III one: for every target return, find the weights that minimize variance.
+## Mean-variance as Level III teaches it
+
+The Level III reading on asset allocation starts from Markowitz. An investor cares about the mean and variance of portfolio return; for every target return there is a set of weights that minimizes variance, and the locus of those portfolios is the efficient frontier. Add a risk-free asset and the frontier becomes a straight line, the capital market line, running from the risk-free rate through the tangency portfolio, which is the risky portfolio with the highest Sharpe ratio. Every investor holds some mix of the risk-free asset and that one portfolio; the mix is set by risk tolerance, the portfolio itself is not. That is two-fund separation, and it is the reason the curriculum spends so long on the tangency point.
+
+The portfolio problem is:
 
 $$
 \min_w\; w^\top \Sigma w \quad \text{s.t.}\quad w^\top \mu = \mu_p,\;\; w^\top \mathbf{1} = 1
@@ -50,13 +81,35 @@ $$
 
 and the tangency portfolio with a risk-free rate $r_f$ is $w_T \propto \Sigma^{-1}(\mu - r_f\mathbf{1})$. The model draws that curve, the capital market line through the tangency point, and a cloud of random long-only portfolios so you can see where the constraint binds.
 
+The curriculum then spends the rest of the reading on why nobody runs an unconstrained optimizer. Mean-variance weights are extremely sensitive to the expected-return vector; small changes produce large, often implausible, swings in allocation; and the inputs are estimated with error that the optimizer treats as truth. The standard responses are constraints (long-only, position caps), reverse optimization (back out the returns implied by a market-weight portfolio and shade toward them, the Black-Litterman idea), resampling, and risk budgeting, which asks what fraction of variance each asset contributes rather than what fraction of capital it holds. All of these sit on the same covariance matrix. The correlation slider changes one cell of it and shows how much of the answer lived there.
+
 <Frontier id="frontier" />
+
+## Why the correlation has a sign
+
+Two macro shocks drive both assets. A growth shock raises expected earnings and raises real rates; stocks rise, bonds fall, and the correlation is negative. An inflation shock raises nominal rates and compresses equity multiples; both fall, and the correlation is positive. Which sign you observe depends on which shock has the larger variance in the period and on how the central bank responds to each.
+
+Campbell, Pflueger and Viceira formalize this in a model where the comovement of inflation with the output gap determines the sign of bond risk. When inflation is countercyclical (the 1970s and 1980s), bonds are risky and the correlation is positive. When it is procyclical (roughly 2001 onward), bonds hedge equities and the correlation is negative. Brixton, Brooks, Hecht, Ilmanen, Maloney and McQuinn at AQR reach the same place from the data: the stock-bond correlation depends not on the level of inflation but on the relative volatility of growth and inflation and the correlation between them, and that model explains around 70% of the long-run variation in the US correlation. Their historical point is the one investors forget: the correlation was positive for most of the twentieth century. The negative-correlation regime of 2000 to 2021 is the anomaly, not the baseline.
+
+The practical consequence is in the covariance algebra. With equity volatility $\sigma_s$, bond volatility $\sigma_b$ and correlation $\rho$, a 60/40 portfolio has variance
+
+$$
+\sigma_p^2 = 0.36\,\sigma_s^2 + 0.16\,\sigma_b^2 + 0.48\,\rho\,\sigma_s\sigma_b
+$$
+
+On the estimated volatilities ({pct(sS)} for SPY and {pct(sB)} for IEF), the portfolio's volatility is {pct(volP(rhoPre))} at the pre-2021 correlation of {rhoPre.toFixed(2)}, {pct(volP(rhoNow))} at today's {rhoNow.toFixed(2)}, and {pct(volP(0.4))} at a fully inflation-driven +0.40. The cross term is the hedge. Flip its sign and the bonds stop subtracting risk and start adding it.
+
+## The 2022 episode
+
+In 2022 the Federal Reserve raised its policy rate by 425 basis points in nine months to catch up with inflation that peaked above 9%. Both legs of 60/40 fell together. On the ETF data behind this model, SPY returned {pct(spy22)} in calendar 2022, IEF returned {pct(ief22)}, LQD {pct(lqd22)} and GLD {pct(gld22)}; a 60/40 mix of SPY and IEF returned {pct(mix22)}. Broader benchmarks tell the same story: estimates for a US 60/40 portfolio in 2022 range from roughly −16% to −18% depending on the indices used, the worst calendar year since 1937, and the Bloomberg US Aggregate lost about 13%, the worst year in its history. The one-year SPY–IEF correlation on the rolling chart peaked at {rho2022.toFixed(2)} in the window ending {shortDate(rho2022Date)}.
+
+Risk parity fared worse. The strategy levers the bond sleeve until it carries as much risk as equities, which is a good idea when the correlation is negative and a bad one when it is positive, because leverage amplifies whatever the cross term is doing. The HFR Risk Parity 10% volatility index fell about 19.5% in 2022 against roughly 16% for a global 60/40, and Bridgewater's All Weather fund, the strategy's progenitor, lost about 22%, slightly worse than its 2008 drawdown. The risk-parity ETF RPAR fell more than 30% from its late-2021 high. None of this was a failure of the math. It was the math working as written on an input that had changed sign.
 
 ## Reading it
 
-The rolling-correlation chart at the bottom of the panel is the history of the regime. Before 2021 the one-year SPY–IEF correlation averaged {rhoPre.toFixed(2)}: bonds rallied when stocks fell, and the 60/40 point sat close to the frontier with Treasuries carrying a large tangency weight. In the 2022 inflation shock it peaked at {rho2022.toFixed(2)}. Today it reads {rhoNow.toFixed(2)}.
+The rolling-correlation chart at the bottom of the panel is the history of the regime. Before 2021 the one-year SPY–IEF correlation averaged {rhoPre.toFixed(2)}: bonds rallied when stocks fell, and the 60/40 point sat close to the frontier with Treasuries carrying a large tangency weight. In the 2022 inflation shock it peaked at {rho2022.toFixed(2)}. Its lowest reading in the sample was {rhoMin[1].toFixed(2)}, in the window ending {shortDate(rhoMin[0])}. Today it reads {rhoNow.toFixed(2)}.
 
-Drag the slider to the pre-2021 value and the risk-contribution column shows the equity sleeves contributing roughly 90% of portfolio variance even though they hold 60% of capital; bonds contribute almost nothing because their covariance with equities is negative and cancels part of their own variance. Drag it past the 2022 peak toward +0.40, a fully inflation-driven regime, and three things happen. The frontier shifts right: every level of return now costs more risk. The tangency portfolio sheds Treasuries and leans into whatever is now least correlated with the rest, which in the estimated matrix is gold. And the risk contribution of the equity sleeve goes to roughly 100%; bonds are no longer a hedge, they are a smaller, lower-return version of the same bet.
+Drag the slider to the pre-2021 value and the risk-contribution column shows the bond sleeves contributing *negative* variance: their covariance with equities is negative and cancels part of their own variance, so the equity sleeves account for more than 100% of portfolio risk and the bonds subtract from it. That is what a hedge looks like in a risk budget. Drag it past the 2022 peak toward +0.40, a fully inflation-driven regime, and three things happen. The frontier shifts right: every level of return now costs more risk. The tangency portfolio sheds Treasuries and leans into whatever is now least correlated with the rest, which in the estimated matrix is gold. And the bond sleeve's risk contribution turns positive; the equity share of the budget falls, but only because bonds are now adding risk of their own rather than removing it. Bonds are no longer a hedge, they are a smaller, lower-return version of the same bet.
 
 ## Risk budgeting
 
@@ -66,12 +119,34 @@ $$
 \text{RC}_i = \frac{w_i\,(\Sigma w)_i}{w^\top \Sigma w}
 $$
 
-and the contributions sum to one. This is the lens Level III uses for risk parity and for liability-aware allocation. The table recomputes it on every change. The question an investor should ask is not "what fraction of my capital is in bonds" but "what fraction of my risk is in equities", and in the positive-correlation regime the honest answer is: almost all of it.
+and the contributions sum to one. This is the lens Level III uses for risk parity and for liability-aware allocation. The table recomputes it on every change. For a two-asset 60/40 on the estimated volatilities, the equity share of risk is {pct(rcEq(rhoPre), 0)} at the pre-2021 correlation, which leaves the bond share at {pct(1 - rcEq(rhoPre), 0)}: bonds remove risk. It is {pct(rcEq(rhoNow), 0)} at today's reading and {pct(rcEq(0.4), 0)} at +0.40, while portfolio volatility rises from {pct(volP(rhoPre))} to {pct(volP(0.4))}. The question an investor should ask is not "what fraction of my capital is in bonds" but "what does my bond sleeve do to my risk", and in the positive-correlation regime the honest answer is: it adds to it.
+
+Risk parity inverts the question: choose weights so that each asset's RC is equal, then lever the whole portfolio to the desired volatility. With a negative correlation the unlevered risk-parity portfolio is mostly bonds and has low volatility, so the leverage is large, often two to three times. When the correlation flips, the levered bond sleeve loses alongside equities and the leverage that was harvesting diversification is now compounding a single bet. That is the 2022 drawdown in one sentence, and it is why the risk-contribution table is the part of this model to study rather than the frontier.
+
+## Where the regime stands today
+
+The curve and the inflation data are the other half of the read. The 10-year yield is {y10.toFixed(2)}% and the 2-year {y2.toFixed(2)}%, a slope of {slope >= 0 ? '+' : ''}{(slope * 100).toFixed(0)} basis points, with the 3-month bill at {bill.toFixed(2)}%. Headline CPI is running at {cpi.value.toFixed(1)}% year over year as of {shortDate(cpi.asOf)}, and the 10-year breakeven at {bei.toFixed(2)}% says what the bond market expects inflation to average. The AQR result says to watch the volatility of inflation relative to growth, not its level, and the breakeven is the cleanest daily proxy: a breakeven that moves a lot is a market unsure about inflation, which is the condition for a positive correlation. A correlation reading of {rhoNow.toFixed(2)} against a pre-2021 average of {rhoPre.toFixed(2)} tells you how far the market has traveled from the old regime; the slider tells you what the rest of the trip costs.
+
+## How to use the model
+
+Three experiments.
+
+First, set the correlation to the pre-2021 average and note the tangency weight in Treasuries. Then move it to today's reading and to +0.40, recording the weight at each step. The path is the price of the regime change, expressed in how much duration the optimizer is willing to hold. If you own a target-date fund or a balanced fund, its bond sleeve was sized for the first number.
+
+Second, leave the correlation at today's reading and flip the expected-return toggle from yield-based to trailing. The tangency weights move more than they did across the whole correlation range. That is the Level III warning about expected returns in one click: the correlation regime changes the shape of risk, but the return assumptions decide the allocation, and they are the input you know least.
+
+Third, hold everything fixed and find the correlation at which gold's tangency weight overtakes Treasuries'. That crossover is the model's definition of a regime change: the point at which the historically uncorrelated asset becomes the primary diversifier. Compare it with the current rolling reading.
 
 ## The sensitivity you cannot avoid
 
-Mean-variance optimizers are notoriously driven by expected returns, which are the inputs nobody knows. Flip the method toggle and watch the tangency weights swing; the five-year trailing returns reflect a window in which Treasuries lost money and gold compounded at {pct(st.annRet[4])}, and an optimizer fed those numbers will tell you to own very little duration. Nudge the equity expected return by 50 basis points and the weights move again. That instability is not a reason to abandon the framework. It is a reason to use it for the thing it is good at, which is showing how the *structure* of risk changes with correlation, and to treat the weights it spits out as a direction rather than a destination.
+Mean-variance optimizers are notoriously driven by expected returns, which are the inputs nobody knows. Flip the method toggle and watch the tangency weights swing; the five-year trailing returns reflect a window in which Treasuries returned {pct(st.annRet[2])} a year and gold compounded at {pct(st.annRet[4])}, and an optimizer fed those numbers will tell you to own very little duration. Nudge the equity expected return by 50 basis points and the weights move again. That instability is not a reason to abandon the framework. It is a reason to use it for the thing it is good at, which is showing how the *structure* of risk changes with correlation, and to treat the weights it spits out as a direction rather than a destination.
+
+## What to watch
+
+Three indicators. The one-year rolling SPY–IEF correlation, which the chart updates on every build: a sustained move back below zero is the old regime returning, and a sustained reading above +0.20 is confirmation that it has not. The 10-year breakeven and its day-to-day volatility: the regime literature says inflation uncertainty, not inflation, sets the sign. And the 2s10s slope: a curve that steepens as the Fed cuts is a growth-shock market in which duration hedges; a curve that steepens because the long end sells off on inflation or supply is one in which it does not.
 
 ## What this means for investors
 
 Decide which regime you believe you are in. If inflation risk dominates, bonds are duration exposure rather than a hedge, and the diversifiers that matter are the ones uncorrelated with both growth and inflation shocks. If growth risk dominates, the old regime returns and Treasuries resume their role. The rolling chart tells you where the market has been; the slider is your belief about where it goes; the frontier is its consequence.
+
+By instrument, and for education rather than advice. Nominal Treasuries and aggregate bond funds: in a positive-correlation regime they still provide income and liquidity but not insurance, so size them for income at {y10.toFixed(2)}% rather than for ballast. Inflation-protected Treasuries hedge the inflation shock directly and are the natural substitute for part of the nominal sleeve when breakevens are low relative to realized inflation. Gold is what the optimizer reaches for when both stocks and bonds are exposed to the same shock; its weakness is that its expected return is the least defensible input in the model. Investment-grade credit behaves like a blend of the two legs, and its spread ({oas.toFixed(2)} points) is the only part of its return that is not duration. Equities are the risk you are actually holding in every version of 60/40; the regime question is only about whether anything else offsets them. And for anyone in a balanced or target-date fund, the question to ask the manager is not the capital split but the risk split, which is the column this model recomputes on every move of the slider.

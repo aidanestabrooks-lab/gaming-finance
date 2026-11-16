@@ -3,12 +3,13 @@ title: "The Fed Moves First: Backward Induction on the Next Decision"
 date: 2026-09-11
 week: 7
 tags: [Game Theory, Markets]
-summary: "The Fed sets the rate, the data arrive, the market positions. That is a sequential game with a chance node in the middle, and it is solved from the end backward. The tree below is anchored to the current inflation prints and to what Kalshi and Polymarket are pricing for the next FOMC meeting, and it shows which move is the equilibrium under each view of the data."
+summary: "The Fed sets the rate, the data arrive, the market positions. That is a sequential game with a chance node in the middle, and it is solved from the end backward. The tree below is anchored to the current inflation prints and to what Kalshi and Polymarket are pricing for the next FOMC meeting, and it shows which move is the equilibrium under each view of the data. The text sets out subgame perfection and why it differs from Nash, what the reaction-function literature says the Fed is actually optimizing, and how to read event-contract odds without over-reading them."
 takeaways:
-  - "Solve sequential games from the last move backward. The first mover's best choice depends on how every later player will respond, including Nature."
-  - "A chance node turns the market's payoff into an expectation. The probability that inflation re-accelerates is the one number that flips the Fed's equilibrium move between hiking, holding and cutting."
-  - "Prediction-market prices on the decision are a second estimate of that same probability. When the tree solved on the data disagrees with the tree solved on the market's odds, one of the two is mispricing inflation risk."
-  - "Backward induction assumes everyone is rational and everyone knows the tree. The mispricings come when the market thinks the Fed is playing a different tree."
+  - "Solve sequential games from the last move backward. The first mover's best choice depends on how every later player will respond, including Nature, and a Nash equilibrium that relies on a response nobody would actually make is not subgame perfect."
+  - "A chance node turns the market's payoff into an expectation. In this tree the probability that inflation re-accelerates is the one number that flips the Fed's equilibrium move: below roughly 0.16 the rollback picks Cut, between about 0.16 and 0.48 it picks Hold, above about 0.48 it picks Hike."
+  - "The Taylor rule and its balanced-approach variant are the Fed's strategy written as a function of the state; forward guidance is the Fed trying to make that strategy common knowledge. The committee consults the rules and does not follow them mechanically, which is where the market's uncertainty about the tree comes from."
+  - "Prediction-market prices on the decision are a second estimate of the same probability. When the tree solved on the data disagrees with the tree solved on the market's odds, one of the two is mispricing inflation risk, or the market believes the Fed is playing a different tree."
+  - "Dissents in both directions at the same meeting, as in December 2025, are the committee revealing a distribution over p rather than a point. Read them as data on the chance node, not as noise."
 sources:
   - title: "Federal Reserve: FOMC statements and projections"
     url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
@@ -20,6 +21,20 @@ sources:
     url: https://polymarket.com/
   - title: "Selten, R. (1965). Spieltheoretische Behandlung eines Oligopolmodells (subgame perfection)"
     url: https://www.jstor.org/stable/40748884
+  - title: "Taylor, J. B. (1993). Discretion versus policy rules in practice. Carnegie-Rochester Conference Series on Public Policy 39, 195-214"
+    url: https://ideas.repec.org/a/eee/crcspp/v39y1993ip195-214.html
+  - title: "Federal Reserve Board: Policy rules and how policymakers use them"
+    url: https://www.federalreserve.gov/monetarypolicy/policy-rules-and-how-policymakers-use-them.htm
+  - title: "Federal Reserve Board: What is forward guidance and how is it used in monetary policy?"
+    url: https://www.federalreserve.gov/faqs/what-is-forward-guidance-how-is-it-used-in-the-federal-reserve-monetary-policy.htm
+  - title: "FOMC statement, September 18, 2024 (50 basis point cut)"
+    url: https://www.federalreserve.gov/newsevents/pressreleases/monetary20240918a.htm
+  - title: "FOMC statement, September 17, 2025 (25 basis point cut)"
+    url: https://www.federalreserve.gov/newsevents/pressreleases/monetary20250917a.htm
+  - title: "FOMC statement, December 10, 2025 (25 basis point cut, dissents in both directions)"
+    url: https://www.federalreserve.gov/newsevents/pressreleases/monetary20251210a.htm
+  - title: "FOMC statement, July 29, 2026 (hold, three dissents in favor of a hike)"
+    url: https://www.federalreserve.gov/newsevents/pressreleases/monetary20260729a.htm
 ---
 import GameTree from '../../components/models/GameTree.astro';
 import { fred, fedOutcomes, kalshi, polymarket, shortDate } from '../../lib/data';
@@ -77,6 +92,10 @@ export const scenarios = [
   { name: `Market-implied, Polymarket (p = ${pMarket(pol).toFixed(2)})`, tree: fed(pMarket(pol)) },
 ];
 export const eq = scenarios.map((s) => { const r = solve(s.tree, ['Fed', 'Market']); return s.tree.actions[r.choice].label; });
+// Taylor (1993) benchmark on the live prints. Assumptions, not data: a 1% neutral real rate and a 4.2% natural rate of
+// unemployment, with the output gap proxied by minus twice the unemployment gap (an Okun coefficient of 2).
+export const mid = (lo + hi) / 2;
+export const taylor = 1 + core.value + 0.5 * (core.value - 2) - 1.0 * (unrate - 4.2);
 
 ## The setup
 
@@ -92,6 +111,22 @@ Where the game starts matters. The target range is {lo.toFixed(2)}–{hi.toFixed
   scenarios={scenarios}
   note="Payoffs (Fed, Market). Click a scenario to re-solve. Hover a node for its rollback value. Branch probabilities are rounded to two decimals."
 />
+
+## Subgame perfection, and why it is not just Nash
+
+A Nash equilibrium is a profile of strategies in which nobody gains by deviating, given what everyone else is doing. In a sequential game that definition is too weak, because a strategy specifies what a player would do at every node, including nodes that are never reached, and Nash places no discipline on those unreached choices. The market could announce a strategy of "stay short no matter what the Fed does," and if the Fed believed it, holding or hiking might look like a Fed best response. But the announcement is not credible: at the node where the Fed has cut and inflation has stayed contained, extending duration pays the market 4 and staying short pays 0. A rational market extends. A Nash equilibrium built on the threat to stay short is supported by behavior the market would never carry out.
+
+Selten's refinement, subgame-perfect equilibrium, requires that the strategy profile be a Nash equilibrium in every subgame, which means at every node, reached or not. Backward induction is the algorithm that finds it in a finite game of perfect information: start at the terminal nodes, let the last mover pick, replace the node with the chosen payoff, repeat. Non-credible threats are eliminated by construction, because each player's choice at each node is computed from that node's own payoffs. The dark path in the tree is the subgame-perfect equilibrium; the lighter branches are the alternatives the players would not choose when they get there.
+
+The chance node is the other structural ingredient. Nature is not a player and has no payoff. At a Nature node the rollback value is the probability-weighted average of the children, with the market's optimal response already substituted in at each branch:
+
+$$
+\mathbb{E}[u] = p \cdot u(\text{re-accelerate}) + (1-p) \cdot u(\text{contained})
+$$
+
+The Fed is therefore choosing among three expectations, each of which already assumes the market will respond rationally to whatever the data turn out to be. That is the formal content of the sentence "the Fed is forward-looking": its payoff from a move today is the expected rollback value of the subgame that move starts.
+
+With this tree's payoffs the thresholds can be computed by hand. After re-acceleration the market stays short on every branch; after contained inflation it extends. The Fed's rollback values are therefore $1.2p - 1$ for a hike, $2 - 5p$ for a hold, and $3 - 11.2p$ for a cut, before the branch probabilities are clamped and rounded. Cut beats Hold when $p$ is below about 0.16, Hold beats Hike when $p$ is below about 0.48. The entire decision collapses onto one scalar and two thresholds.
 
 ## Where the probabilities come from
 
@@ -115,17 +150,33 @@ A committee that hikes is one that sees re-acceleration as likely; one that cuts
 
 **Conditional on the move.** Inside the tree, the Fed's own action shifts the odds: after a hike the re-acceleration probability is $0.6p$, after a hold it is $p$, after a cut it is $1.4p$. Policy is not a bet on the weather; it changes the weather.
 
-## How backward induction works
+## What the reaction-function literature says
 
-Start at the terminal nodes. At each market node, the market picks the action with the higher market payoff. Replace the node with the payoff pair of that choice. At each Nature node, take the probability-weighted average of the children. Finally, at the Fed's node, choose the branch whose rolled-back Fed payoff is highest. The dark path is the subgame-perfect equilibrium, meaning it is optimal at every node, not just at the start.
+The tree treats the Fed as a player optimizing a payoff. The empirical literature describes the Fed as following, approximately, a rule, and the two descriptions are the same thing viewed from different ends: a rule is a strategy, a mapping from the state of the economy to an action, and a strategy is what backward induction produces.
 
-The expected value at a Nature node is
+Taylor's 1993 rule is the benchmark. In the Board's own notation it prescribes a nominal funds rate of $R = r^{LR} + \pi + 0.5(\pi - \pi^*) + 0.5(y - y^P)$: the neutral real rate plus current inflation, plus half the inflation gap, plus half the output gap. The balanced-approach rule, which the Board also publishes, doubles the coefficient on the output gap to 1. The Board's page is explicit that policymakers "consult, but do not mechanically follow" these rules, for reasons it lists: the choice of inflation and activity measures requires judgment, the neutral rate and potential output are unobservable, and committee members disagree about how policy works. That disagreement is the gap between the Fed's true tree and the one the market thinks it is playing.
 
-$$
-\mathbb{E}[u] = p \cdot u(\text{re-accelerate}) + (1-p) \cdot u(\text{contained})
-$$
+On the live prints, with a 1% neutral real rate and a 4.2% natural rate of unemployment assumed, and the output gap proxied by minus twice the unemployment gap, the Taylor rule prescribes {taylor.toFixed(2)}% against a current target midpoint of {mid.toFixed(2)}%, a difference of {(taylor - mid).toFixed(2)} points (positive means the rule calls for a higher rate than the one in place). Those two assumptions are the whole argument; move either by half a point and the prescription moves with it. The point of the exercise is not the number but the sign and size of the gap, which is a crude measure of whether the committee is behind or ahead of its own benchmark and therefore of which branch is under pressure.
 
-with the market's optimal response already substituted in at each branch. The Fed is therefore choosing among three expectations, each of which already assumes the market will respond rationally.
+Forward guidance is the second half of the literature. The Board's account dates its systematic use to the early 2000s, when the committee changed statement language in steps ahead of the June 2004 tightening, and to December 2008, when the statement said conditions were likely to warrant "exceptionally low levels of the federal funds rate for some time," later made conditional on economic outcomes. In the tree, forward guidance is the first mover trying to make its strategy common knowledge, so that the last mover prices the right tree. When guidance is believed, the market's response is the equilibrium response and the Fed's move is not a surprise. When it is not, the market is solving a different tree, and the dark path it expects is not the one the Fed walks.
+
+## The recent record as draws from the tree
+
+The last two years supply observations of each branch. On September 18, 2024, the committee cut by 50 basis points to 4.75–5.00%, with Governor Bowman dissenting in favor of 25: a committee that put a low weight on re-acceleration, and one member who put a higher one. On September 17, 2025, it cut 25 to 4.00–4.25%, stating that "downside risks to employment have risen," with Governor Miran dissenting in favor of 50. On December 10, 2025, it cut again to 3.50–3.75% with dissents in both directions: Miran for a half-point cut, Goolsbee and Schmid for no change. On July 29, 2026, it held at 3.50–3.75% by a 9–3 vote, with Hammack, Kashkari and Logan dissenting in favor of a hike and the statement describing inflation as elevated, partly on supply shocks including energy.
+
+Read as a sequence, the committee's modal $p$ rose from well below the Cut threshold through the Hold band toward the Hike threshold in under two years. Dissents in both directions at the same meeting are the useful datum: they say the committee's internal distribution over $p$ straddled a threshold. A market that treats the statement as a point estimate and the dissents as noise is throwing away the variance.
+
+## How to read the prediction-market odds
+
+Event contracts price the Fed's action, not inflation, so three translations are needed before the odds can enter the tree.
+
+First, from price to probability. Each venue lists mutually exclusive outcomes; the model takes the mid of bid and ask for each and normalizes so the five sum to one. Spreads, fees and inventory mean raw mids rarely sum to exactly one, and thin outcomes can carry a bid of zero and an ask of a cent, so the normalization matters more at the tails than at the mode.
+
+Second, from action to belief. The mapping $p_{\text{mkt}} = 0.75\,P(\text{hike}) + 0.30\,P(\text{hold}) + 0.10\,P(\text{cut})$ is a modeling choice that says: a committee confident enough to hike has a re-acceleration probability near the top of the Hike band, one that holds sits in the middle of the Hold band, one that cuts sits in the Cut band. Its consistency property is what makes it usable: a venue that puts all its weight on one action reproduces that action as the tree's equilibrium. A venue split between two actions produces a $p$ between them and the tree picks whichever side of the threshold it lands on.
+
+Third, from risk-neutral to real-world. Contract prices are the market's risk-neutral probabilities, and participants who hedge rate exposure will pay more for the outcome that hurts them. The bias is small for a two-sided question like a Fed decision but not zero, and it grows when one outcome is tied to a tail scenario.
+
+With those caveats the odds are the best public, continuously updated estimate of where the committee sits; the quotes used here were taken {shortDate(kalshi.fetched)}.
 
 ## Reading the three scenarios
 
@@ -135,6 +186,31 @@ Read the disagreement, if there is one, as information. When the data-anchored t
 
 Notice that the market's choice rarely changes across scenarios. Under most branches, extending duration after a cut and staying short after a hike is the market's best response. The Fed knows that, which is part of why the size and direction of a move is treated as a signal and not merely a rate.
 
+## How to use the model
+
+**Experiment 1: the thresholds.** Click each of the three scenario buttons and read the Fed's rollback values by hovering the three branch nodes. In whichever scenario has the lowest $p$, the gap between the chosen branch and the runner-up is the margin of safety: a small gap means the equilibrium sits near a threshold and one inflation print could flip it. Compare the scenario $p$ values in the button labels to the 0.16 and 0.48 thresholds derived above; the chosen move should match.
+
+**Experiment 2: the market node.** Hover the four market nodes under any Fed branch. After "re-accelerates" the market's choice is Stay short on every branch; after "contained" it is Extend duration. That is why the market's strategy is almost never the interesting part of the tree, and why the Fed's move is read as a signal about $p$ rather than as a rate.
+
+## What to watch
+
+- **The next core PCE and CPI prints.** Each 0.1 point on core PCE moves the data-anchored $p$ by 0.02 when headline moves with it and by 0.01 when it does not; a widening headline–core gap adds 0.01 per 0.1 point on its own.
+- **Breakevens.** The 10-year breakeven enters the formula directly, and it is the only input that updates daily.
+- **The unemployment rate.** It does not enter $p$ but it enters the Taylor benchmark, and a rising rate is the channel through which the committee has justified cuts.
+- **Dissents and the dot plot.** The count and direction of dissents are observations of the committee's distribution over $p$; the quarterly projections give the modal path.
+- **Venue divergence.** When Kalshi and Polymarket imply different modal moves, one of them is the better trade, and the difference is usually in the tails where liquidity is thinnest.
+- **The gap between the data-anchored and market-implied scenarios.** It is the model's single summary of whether the market and the prints agree.
+
 ## What this means for investors
 
-Your edge is not in the terminal payoffs, which everyone roughly agrees on. It is in $p$. The probability of re-acceleration is the one number that flips the equilibrium, and it moves with every inflation print. Position for the *equilibrium path under your* $p$, compare it with the path the market is pricing on Kalshi and Polymarket, and when they differ you have a trade with a reason. The quotes used here were taken {shortDate(kalshi.fetched)} and are refreshed with each daily rebuild; the odds on the exchanges move intraday.
+Your edge is not in the terminal payoffs, which everyone roughly agrees on. It is in $p$. The probability of re-acceleration is the one number that flips the equilibrium, and it moves with every inflation print. Position for the *equilibrium path under your* $p$, compare it with the path the market is pricing on Kalshi and Polymarket, and when they differ you have a trade with a reason. By instrument:
+
+**Duration.** The market's last-mover choice in the tree is the duration decision itself. If your $p$ sits below the market's, the tree says the Fed is more likely to hold or cut than priced, and the Extend branch is the one to be on; if it sits above, the Stay-short branch.
+
+**Front-end futures.** Fed funds and SOFR futures price the same event the prediction markets do, with far more liquidity. A gap between the futures-implied move and the event-contract odds is a cross-venue disagreement about the same node.
+
+**Inflation-linked bonds.** Breakevens are both an input to $p$ and a position on it. Being long breakevens is being long the re-acceleration branch directly, without taking a view on the Fed's response.
+
+**Equities and the dollar.** Second-order expressions of the duration decision: they move on the Fed's branch choice rather than on $p$, a cleaner trade on a surprise and a noisier one on the probability.
+
+The quotes used here are refreshed with each daily rebuild; the odds on the exchanges move intraday. This is an educational model of incentives, not a forecast, and nothing here is investment advice.
