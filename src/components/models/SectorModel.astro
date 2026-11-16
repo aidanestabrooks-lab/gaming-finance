@@ -1,0 +1,412 @@
+---
+/**
+ * Sector forecasting models (CFA Level II quantitative methods: multiple
+ * regression; Level III: factor-based asset allocation). Everything is
+ * estimated in the browser from a monthly panel built at build time:
+ *   (a) a macro factor model: each sector ETF's return relative to SPY
+ *       regressed on changes in the 10-year yield, the Baa credit spread, the
+ *       broad dollar, WTI crude and the VIX;
+ *   (b) a scenario forecaster that turns a one-month macro shock into a
+ *       ranked, conditional forecast of relative sector returns with a
+ *       residual band, plus an expanding-window out-of-sample check;
+ *   (c) a pooled cross-sectional momentum/reversal model with an expanding
+ *       window, Spearman rank correlation out of sample, and a long-top-3 /
+ *       short-bottom-3 backtest.
+ */
+import { sectorPanel, sectors, prices, fred, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+}
+const { id, title = 'Sector factor model, scenario forecaster and momentum ranking', note } = Astro.props;
+
+const panel = sectorPanel();
+const SHORT: Record<string, string> = {
+  Technology: 'Tech', 'Communication Services': 'Comm Svcs', 'Consumer Discretionary': 'Cons Disc', 'Consumer Staples': 'Staples',
+  'Health Care': 'Health', Financials: 'Financials', Industrials: 'Industrials', Energy: 'Energy', Materials: 'Materials', Utilities: 'Utilities', 'Real Estate': 'Real Estate',
+};
+const cfg = {
+  months: panel.months,
+  tickers: panel.tickers,
+  names: panel.names,
+  short: panel.names.map((n) => SHORT[n] ?? n),
+  ret: panel.ret,
+  spy: panel.spy,
+  factors: panel.factors,
+  fac: panel.fac,
+  levels: panel.levels,
+};
+const n = panel.months.length;
+const first = panel.months[0];
+const last = panel.months[n - 1];
+const lv = panel.levels;
+const defaultNote = `Eleven SPDR sector ETFs versus SPY, ${n} monthly observations from ${first} to ${last}. Factor betas, t-statistics and forecasts are re-estimated in your browser every time an input moves. A conditional forecast says what the model expects if the scenario happens, not that it will.`;
+---
+
+<div class="model" data-model="sector" id={id}>
+  <script is:inline type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    <p class="model-note">{note ?? defaultNote}</p>
+  </div>
+
+  <h4 class="sub">1. Macro factor betas (OLS, monthly relative returns)</h4>
+  <p class="readout">
+    Each cell is the sector's beta to a one-unit change in the factor, estimated over {first} to {last} (n = {n}). Hover a cell for the t-statistic. Units: percentage points of 10-year yield and Baa spread, log change of the dollar index and WTI, points of VIX. Current levels: 10y {lv.DGS10.toFixed(2)}%, Baa spread {lv.BAA10Y.toFixed(2)} pp, dollar index {lv.DTWEXBGS.toFixed(1)}, WTI ${lv.DCOILWTICO.toFixed(2)}, VIX {lv.VIXCLS.toFixed(1)}.
+  </p>
+  <svg class="heat" viewBox="0 0 720 330" role="img" aria-label="Heatmap of sector betas to macro factors"></svg>
+  <div class="table-scroll">
+    <table class="fit">
+      <thead><tr><th>Sector</th><th>α (mo.)</th><th>R²</th><th>Resid σ (mo.)</th><th>In-sample sign hit</th></tr></thead>
+      <tbody data-out="fit"></tbody>
+    </table>
+  </div>
+
+  <h4 class="sub">2. Scenario forecaster: one-month macro shock → relative sector return</h4>
+  <div class="btn-row" data-presets>
+    <button class="btn small" type="button" data-preset="reset">No shock</button>
+    <button class="btn small" type="button" data-preset="hike">Hike shock</button>
+    <button class="btn small" type="button" data-preset="credit">Credit stress</button>
+    <button class="btn small" type="button" data-preset="oil">Oil spike</button>
+    <button class="btn small" type="button" data-preset="riskon">Risk-on</button>
+  </div>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>10-year yield</span><output data-o="d10">0 bp</output></span><input type="range" min="-100" max="100" step="5" value="0" data-in="d10" /></label>
+    <label class="ctl"><span class="lab"><span>Baa credit spread</span><output data-o="dcr">0 bp</output></span><input type="range" min="-150" max="150" step="5" value="0" data-in="dcr" /></label>
+    <label class="ctl"><span class="lab"><span>Broad dollar index</span><output data-o="dusd">0%</output></span><input type="range" min="-10" max="10" step="0.5" value="0" data-in="dusd" /></label>
+    <label class="ctl"><span class="lab"><span>WTI crude</span><output data-o="doil">0%</output></span><input type="range" min="-30" max="30" step="1" value="0" data-in="doil" /></label>
+    <label class="ctl"><span class="lab"><span>VIX</span><output data-o="dvix">0 pts</output></span><input type="range" min="-15" max="15" step="0.5" value="0" data-in="dvix" /></label>
+  </div>
+  <svg class="bars" viewBox="0 0 720 330" role="img" aria-label="Ranked conditional forecast of relative sector returns"></svg>
+  <div class="legend"><span><i style="background: var(--c1)"></i>α̂ + β̂·shock (relative to SPY, one month)</span><span><i style="background: var(--muted)"></i>±1 residual σ</span></div>
+  <div class="stats">
+    <div class="stat"><div class="k">Scenario (factor units)</div><div class="v small" data-out="shock">–</div></div>
+    <div class="stat"><div class="k">Out-of-sample sign hit rate</div><div class="v" data-out="oosHit">–</div><div class="k" data-out="oosN">–</div></div>
+    <div class="stat"><div class="k">Out-of-sample rank correlation</div><div class="v" data-out="oosRho">–</div><div class="k">Spearman, realized vs predicted, avg. across months</div></div>
+  </div>
+  <p class="readout" data-out="oosNote">–</p>
+
+  <h4 class="sub">3. Cross-sectional momentum and reversal (pooled, expanding window)</h4>
+  <p class="readout">
+    At each month, next month's relative return of every sector is regressed on its 12-1 momentum (the cumulative relative return over the prior eleven months, skipping the latest) and its prior one-month relative return, pooling all sectors and all months seen so far (minimum 36). The fitted model predicts the following month out of sample.
+  </p>
+  <div class="stats">
+    <div class="stat"><div class="k">Momentum coefficient</div><div class="v" data-out="bMom">–</div><div class="k" data-out="tMom">–</div></div>
+    <div class="stat"><div class="k">Reversal coefficient</div><div class="v" data-out="bRev">–</div><div class="k" data-out="tRev">–</div></div>
+    <div class="stat"><div class="k">OOS rank correlation</div><div class="v" data-out="momRho">–</div><div class="k" data-out="momN">–</div></div>
+    <div class="stat"><div class="k">Long top 3 / short bottom 3</div><div class="v" data-out="lsRet">–</div><div class="k" data-out="lsStat">–</div></div>
+  </div>
+  <svg class="bt" viewBox="0 0 720 240" role="img" aria-label="Backtest of the momentum ranking"></svg>
+  <div class="legend"><span><i style="background: var(--c1)"></i>Top-3 sectors by model, rebalanced monthly</span><span><i style="background: var(--c3)"></i>Equal weight, all 11 sectors</span><span><i style="background: var(--c2)"></i>Long top 3 / short bottom 3 (spread)</span></div>
+
+  <h4 class="sub">4. Blended ranking for next month</h4>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Weight on scenario forecast (rest on momentum)</span><output data-o="w">50%</output></span><input type="range" min="0" max="1" step="0.05" value="0.5" data-in="w" /></label>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Rank</th><th>Sector</th><th>Scenario forecast</th><th>Momentum forecast</th><th>12-1 momentum</th><th>Last month</th><th>Blend z-score</th></tr></thead>
+      <tbody data-out="rank"></tbody>
+    </table>
+  </div>
+  <p class="readout">Estimated: every beta, t-statistic, R², residual σ, momentum coefficient and backtest figure above, from the stated sample. Assumed: the scenario you set, the blend weight, OLS with homoskedastic errors, and that the next month resembles the sample. Eleven sectors and roughly a hundred months is a small panel; treat the rank correlations as evidence about the direction of effects, not as a trading edge.</p>
+
+  <DataNote
+    sources={[
+      { name: 'Yahoo Finance: SPDR sector ETFs (XLK, XLC, XLY, XLP, XLV, XLF, XLI, XLE, XLB, XLU, XLRE) and SPY, adjusted daily closes', asOf: prices.asOf(), url: 'https://www.ssga.com/us/en/intermediary/etfs/fund-finder?g=sector' },
+      { name: 'FRED DGS10, BAA10Y, DTWEXBGS, DCOILWTICO, VIXCLS', asOf: fred.asOf('DGS10'), url: 'https://fred.stlouisfed.org/series/BAA10Y' },
+    ]}
+    note={`Derived: month-end returns from daily closes; factor changes are month-end to month-end. Panel starts ${first} because XLC listed in 2018. Snapshot refreshed daily at build time.`}
+  />
+</div>
+
+<style>
+  .sub {
+    font-family: var(--sans);
+    font-size: 0.8rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 1.4rem 0 0.4rem;
+  }
+  .stat .v.small {
+    font-size: 0.82rem;
+    font-weight: 500;
+  }
+  .fit td {
+    font-family: var(--mono);
+  }
+  .model svg.heat text.cell {
+    font-size: 10.5px;
+    font-family: var(--mono);
+  }
+</style>
+
+<script>
+  import { solve, mean, stdev } from '../../lib/stats';
+  import { el, clear, scale, path, ticks } from '../../lib/svg';
+
+  interface Cfg {
+    months: string[]; tickers: string[]; names: string[]; short: string[];
+    ret: number[][]; spy: number[]; factors: string[]; fac: number[][]; levels: Record<string, number>;
+  }
+  interface Fit { beta: number[]; se: number[]; t: number[]; r2: number; sigma: number; hit: number; fitted: number[] }
+
+  /** OLS with intercept. X rows exclude the constant. */
+  function ols(X: number[][], y: number[]): Fit {
+    const n = y.length, k = X[0].length + 1;
+    const rows = X.map((r) => [1, ...r]);
+    const XtX: number[][] = Array.from({ length: k }, () => Array(k).fill(0));
+    const Xty: number[] = Array(k).fill(0);
+    for (let i = 0; i < n; i++) {
+      for (let a = 0; a < k; a++) {
+        Xty[a] += rows[i][a] * y[i];
+        for (let b = 0; b < k; b++) XtX[a][b] += rows[i][a] * rows[i][b];
+      }
+    }
+    const beta = solve(XtX, Xty);
+    const fitted = rows.map((r) => r.reduce((s, v, j) => s + v * beta[j], 0));
+    const resid = y.map((v, i) => v - fitted[i]);
+    const sse = resid.reduce((s, e) => s + e * e, 0);
+    const my = mean(y);
+    const sst = y.reduce((s, v) => s + (v - my) ** 2, 0);
+    const sigma2 = sse / Math.max(1, n - k);
+    // Diagonal of (X'X)^-1 via k solves.
+    const se = beta.map((_, j) => {
+      const e = Array(k).fill(0);
+      e[j] = 1;
+      const col = solve(XtX.map((r) => [...r]), e);
+      return Math.sqrt(Math.max(0, sigma2 * col[j]));
+    });
+    const t = beta.map((b, j) => (se[j] > 0 ? b / se[j] : 0));
+    const hit = y.reduce((s, v, i) => s + (Math.sign(v) === Math.sign(fitted[i]) ? 1 : 0), 0) / n;
+    return { beta, se, t, r2: sst > 0 ? 1 - sse / sst : 0, sigma: Math.sqrt(sigma2), hit, fitted };
+  }
+
+  function rank(xs: number[]): number[] {
+    const idx = xs.map((v, i) => [v, i] as [number, number]).sort((a, b) => a[0] - b[0]);
+    const r = Array(xs.length).fill(0);
+    idx.forEach(([, i], pos) => (r[i] = pos + 1));
+    return r;
+  }
+  function spearman(a: number[], b: number[]): number {
+    const ra = rank(a), rb = rank(b), n = a.length;
+    const ma = mean(ra), mb = mean(rb);
+    let num = 0, da = 0, db = 0;
+    for (let i = 0; i < n; i++) {
+      num += (ra[i] - ma) * (rb[i] - mb);
+      da += (ra[i] - ma) ** 2;
+      db += (rb[i] - mb) ** 2;
+    }
+    return da && db ? num / Math.sqrt(da * db) : 0;
+  }
+  const zs = (xs: number[]) => {
+    const m = mean(xs), s = stdev(xs) || 1;
+    return xs.map((x) => (x - m) / s);
+  };
+  const pct = (x: number, d = 1) => `${x >= 0 ? '+' : '−'}${(100 * Math.abs(x)).toFixed(d)}%`;
+
+  const PRESETS: Record<string, number[]> = {
+    reset: [0, 0, 0, 0, 0],
+    hike: [50, 25, 3, 0, 5],
+    credit: [-30, 100, 4, -15, 12],
+    oil: [20, 20, 2, 25, 4],
+    riskon: [-20, -40, -3, 8, -6],
+  };
+
+  function drawHeat(svg: SVGSVGElement, cfg: Cfg, fits: Fit[]) {
+    clear(svg);
+    const S = cfg.short.length, F = cfg.factors.length;
+    const left = 110, top = 34, cw = (700 - left) / F, rh = (320 - top) / S;
+    const maxAbs = cfg.factors.map((_, j) => Math.max(...fits.map((f) => Math.abs(f.beta[j + 1]))) || 1);
+    const heads = ['10y yield\n(+1 pp)', 'Baa spread\n(+1 pp)', 'Dollar\n(+100% log)', 'WTI\n(+100% log)', 'VIX\n(+1 pt)'];
+    cfg.factors.forEach((_, j) => {
+      const x = left + cw * (j + 0.5);
+      heads[j].split('\n').forEach((line, li) => svg.appendChild(el('text', { x, y: 12 + li * 12, class: 'tick', 'text-anchor': 'middle' }, line)));
+    });
+    fits.forEach((f, i) => {
+      const y = top + rh * i;
+      svg.appendChild(el('text', { x: left - 8, y: y + rh / 2 + 4, class: 'lbl', 'text-anchor': 'end' }, cfg.short[i]));
+      cfg.factors.forEach((_, j) => {
+        const b = f.beta[j + 1], tt = f.t[j + 1];
+        const a = Math.min(0.85, 0.08 + 0.77 * (Math.abs(b) / maxAbs[j]));
+        const fill = b >= 0 ? `rgba(31,122,77,${a.toFixed(2)})` : `rgba(180,53,42,${a.toFixed(2)})`;
+        const g = el('g');
+        const r = el('rect', { x: left + cw * j + 1, y: y + 1, width: cw - 2, height: rh - 2, fill, rx: 2 });
+        r.appendChild(el('title', {}, `${cfg.names[i]} on ${cfg.factors[j]}: β = ${b.toFixed(3)}, t = ${tt.toFixed(2)}`));
+        g.appendChild(r);
+        const txt = Math.abs(b) >= 0.1 ? b.toFixed(2) : b.toFixed(3);
+        g.appendChild(el('text', { x: left + cw * (j + 0.5), y: y + rh / 2 + 4, class: `cell ${a > 0.45 ? '' : 'lbl'}`, 'text-anchor': 'middle', fill: a > 0.45 ? '#fff' : 'var(--text)' }, `${txt}${Math.abs(tt) >= 1.96 ? '*' : ''}`));
+        svg.appendChild(g);
+      });
+    });
+    svg.appendChild(el('text', { x: 700, y: 328, class: 'lbl muted', 'text-anchor': 'end' }, '* |t| ≥ 1.96'));
+  }
+
+  function drawBars(svg: SVGSVGElement, cfg: Cfg, pred: number[], sig: number[]) {
+    clear(svg);
+    const order = pred.map((v, i) => i).sort((a, b) => pred[b] - pred[a]);
+    const lo = Math.min(0, ...order.map((i) => pred[i] - sig[i])), hi = Math.max(0, ...order.map((i) => pred[i] + sig[i]));
+    const box = { left: 110, right: 700, top: 10, bottom: 300 };
+    const sx = scale(lo, hi, box.left, box.right);
+    const rh = (box.bottom - box.top) / order.length;
+    for (const t of ticks(lo, hi, 6)) {
+      svg.appendChild(el('line', { x1: sx(t), x2: sx(t), y1: box.top, y2: box.bottom, class: 'grid' }));
+      svg.appendChild(el('text', { x: sx(t), y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, `${(100 * t).toFixed(1)}%`));
+    }
+    svg.appendChild(el('line', { x1: sx(0), x2: sx(0), y1: box.top, y2: box.bottom, class: 'axis' }));
+    order.forEach((i, pos) => {
+      const y = box.top + rh * pos;
+      const v = pred[i];
+      svg.appendChild(el('text', { x: box.left - 8, y: y + rh / 2 + 4, class: 'lbl', 'text-anchor': 'end' }, cfg.short[i]));
+      svg.appendChild(el('rect', { x: Math.min(sx(0), sx(v)), y: y + 4, width: Math.abs(sx(v) - sx(0)), height: rh - 8, fill: v >= 0 ? 'var(--c1)' : 'var(--neg)', rx: 2 }));
+      svg.appendChild(el('line', { x1: sx(v - sig[i]), x2: sx(v + sig[i]), y1: y + rh / 2, y2: y + rh / 2, stroke: 'var(--muted)', 'stroke-width': 1.2 }));
+      svg.appendChild(el('text', { x: sx(v) + (v >= 0 ? 6 : -6), y: y + rh / 2 + 4, class: 'lbl mono', 'text-anchor': v >= 0 ? 'start' : 'end' }, pct(v, 2)));
+    });
+  }
+
+  function drawBacktest(svg: SVGSVGElement, months: string[], top3: number[], ew: number[], ls: number[]) {
+    clear(svg);
+    const cum = (r: number[]) => {
+      const out = [1];
+      for (const x of r) out.push(out[out.length - 1] * (1 + x));
+      return out;
+    };
+    const a = cum(top3), b = cum(ew), c = cum(ls);
+    const lo = Math.min(...a, ...b, ...c), hi = Math.max(...a, ...b, ...c);
+    const box = { left: 50, right: 700, top: 12, bottom: 200 };
+    const sx = scale(0, a.length - 1, box.left, box.right), sy = scale(lo, hi, box.bottom, box.top);
+    for (const t of ticks(lo, hi, 5)) {
+      svg.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(t), y2: sy(t), class: 'grid' }));
+      svg.appendChild(el('text', { x: box.left - 6, y: sy(t) + 4, class: 'tick', 'text-anchor': 'end' }, t.toFixed(2)));
+    }
+    months.forEach((m, i) => {
+      if (m.endsWith('-01') || i === 0) svg.appendChild(el('text', { x: sx(i), y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, m.slice(0, 4)));
+    });
+    svg.appendChild(el('line', { x1: box.left, x2: box.right, y1: box.bottom, y2: box.bottom, class: 'axis' }));
+    const line = (xs: number[], color: string) => svg.appendChild(el('path', { d: path(xs.map((v, i) => [sx(i), sy(v)])), fill: 'none', stroke: color, 'stroke-width': 1.6 }));
+    line(b, 'var(--c3)');
+    line(a, 'var(--c1)');
+    line(c, 'var(--c2)');
+    svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 232, class: 'lbl muted', 'text-anchor': 'middle' }, 'Growth of $1 from the first out-of-sample month, monthly rebalancing, no costs'));
+  }
+
+  function init(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.querySelector('script[data-cfg]')!.textContent!);
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const T = cfg.months.length, S = cfg.tickers.length;
+    const rel = cfg.ret.map((row, t) => row.map((r) => r - cfg.spy[t])); // [t][s]
+
+    // (a) full-sample factor fits.
+    const fits: Fit[] = cfg.tickers.map((_, s) => ols(cfg.fac, rel.map((r) => r[s])));
+    drawHeat(root.querySelector<SVGSVGElement>('svg.heat')!, cfg, fits);
+    out('fit').innerHTML = fits
+      .map((f, s) => `<tr><td>${cfg.names[s]}</td><td>${pct(f.beta[0], 2)}</td><td>${f.r2.toFixed(2)}</td><td>${(100 * f.sigma).toFixed(2)}%</td><td>${(100 * f.hit).toFixed(0)}%</td></tr>`)
+      .join('');
+
+    // (b) out-of-sample check of the factor model with realized factors, expanding window from 36 months.
+    let hits = 0, cnt = 0;
+    const rhos: number[] = [];
+    for (let t = 36; t < T; t++) {
+      const Xtr = cfg.fac.slice(0, t);
+      const preds: number[] = [], reals: number[] = [];
+      for (let s = 0; s < S; s++) {
+        const f = ols(Xtr, rel.slice(0, t).map((r) => r[s]));
+        const p = f.beta[0] + cfg.fac[t].reduce((acc, x, j) => acc + x * f.beta[j + 1], 0);
+        preds.push(p);
+        reals.push(rel[t][s]);
+        if (Math.sign(p) === Math.sign(rel[t][s])) hits++;
+        cnt++;
+      }
+      rhos.push(spearman(preds, reals));
+    }
+    out('oosHit').textContent = `${((100 * hits) / cnt).toFixed(0)}%`;
+    out('oosN').textContent = `${cnt} sector-months, ${cfg.months[36]} to ${cfg.months[T - 1]}, refit each month`;
+    out('oosRho').textContent = mean(rhos).toFixed(2);
+    out('oosNote').textContent = `Out-of-sample check: from ${cfg.months[36]} the model is refit each month on the data available up to then and asked to rank the sectors for the next month given that month's realized factor changes. It is a test of whether the betas are stable, not of forecasting the factors themselves; a sign hit rate near 50% and a rank correlation near zero would mean the betas carry no information.`;
+
+    // (c) momentum / reversal panel. Features at month t predict rel[t+1].
+    const momF: number[][] = [], revF: number[][] = [];
+    for (let t = 0; t < T; t++) {
+      momF.push(cfg.tickers.map((_, s) => {
+        if (t < 11) return NaN;
+        let c = 1;
+        for (let k = t - 11; k <= t - 1; k++) c *= 1 + rel[k][s];
+        return c - 1;
+      }));
+      revF.push(cfg.tickers.map((_, s) => rel[t][s]));
+    }
+    const sample = (tEnd: number) => {
+      // all (t, s) with features at t and target at t+1 <= tEnd
+      const X: number[][] = [], y: number[] = [];
+      for (let t = 11; t < tEnd; t++) for (let s = 0; s < S; s++) { X.push([momF[t][s], revF[t][s]]); y.push(rel[t + 1][s]); }
+      return { X, y };
+    };
+    const momRhos: number[] = [], top3: number[] = [], ew: number[] = [], ls: number[] = [], btMonths: string[] = [];
+    const tStart = 11 + 36; // first t with 36 months of (feature, target) pairs
+    for (let t = tStart; t < T - 1; t++) {
+      const { X, y } = sample(t);
+      const f = ols(X, y);
+      const pred = cfg.tickers.map((_, s) => f.beta[0] + f.beta[1] * momF[t][s] + f.beta[2] * revF[t][s]);
+      const real = cfg.tickers.map((_, s) => rel[t + 1][s]);
+      momRhos.push(spearman(pred, real));
+      const order = pred.map((v, i) => i).sort((a, b) => pred[b] - pred[a]);
+      const absNext = cfg.ret[t + 1];
+      top3.push(mean(order.slice(0, 3).map((i) => absNext[i])));
+      ew.push(mean(absNext));
+      ls.push(mean(order.slice(0, 3).map((i) => absNext[i])) - mean(order.slice(-3).map((i) => absNext[i])));
+      btMonths.push(cfg.months[t + 1]);
+    }
+    const full = ols(sample(T - 1).X, sample(T - 1).y);
+    out('bMom').textContent = full.beta[1].toFixed(3);
+    out('tMom').textContent = `t = ${full.t[1].toFixed(2)}, pooled n = ${sample(T - 1).y.length}`;
+    out('bRev').textContent = full.beta[2].toFixed(3);
+    out('tRev').textContent = `t = ${full.t[2].toFixed(2)}; negative means reversal`;
+    out('momRho').textContent = mean(momRhos).toFixed(2);
+    out('momN').textContent = `${momRhos.length} months, ${btMonths[0]} to ${btMonths[btMonths.length - 1]}`;
+    const lsAnn = mean(ls) * 12, lsVol = stdev(ls) * Math.sqrt(12);
+    out('lsRet').textContent = pct(lsAnn, 1) + ' / yr';
+    const lsEl = out('lsRet');
+    lsEl.className = 'v ' + (lsAnn >= 0 ? 'pos' : 'neg');
+    out('lsStat').textContent = `vol ${(100 * lsVol).toFixed(1)}%, Sharpe ${(lsVol ? lsAnn / lsVol : 0).toFixed(2)}, hit ${((100 * ls.filter((x) => x > 0).length) / ls.length).toFixed(0)}%, before costs`;
+    drawBacktest(root.querySelector<SVGSVGElement>('svg.bt')!, btMonths, top3, ew, ls);
+    const momNow = cfg.tickers.map((_, s) => full.beta[0] + full.beta[1] * momF[T - 1][s] + full.beta[2] * revF[T - 1][s]);
+
+    // (b) scenario + (d) blend, live.
+    const sliders = ['d10', 'dcr', 'dusd', 'doil', 'dvix'];
+    const update = () => {
+      const d10 = +q('d10').value, dcr = +q('dcr').value, dusd = +q('dusd').value, doil = +q('doil').value, dvix = +q('dvix').value;
+      o('d10').textContent = `${d10 >= 0 ? '+' : ''}${d10} bp`; o('dcr').textContent = `${dcr >= 0 ? '+' : ''}${dcr} bp`;
+      o('dusd').textContent = `${dusd >= 0 ? '+' : ''}${dusd}%`; o('doil').textContent = `${doil >= 0 ? '+' : ''}${doil}%`; o('dvix').textContent = `${dvix >= 0 ? '+' : ''}${dvix} pts`;
+      const shock = [d10 / 100, dcr / 100, Math.log(1 + dusd / 100), Math.log(1 + doil / 100), dvix];
+      out('shock').textContent = `Δ10y ${shock[0].toFixed(2)} pp · ΔBaa ${shock[1].toFixed(2)} pp · Δlog USD ${shock[2].toFixed(3)} · Δlog WTI ${shock[3].toFixed(3)} · ΔVIX ${shock[4].toFixed(1)}`;
+      const pred = fits.map((f) => f.beta[0] + shock.reduce((acc, x, j) => acc + x * f.beta[j + 1], 0));
+      drawBars(root.querySelector<SVGSVGElement>('svg.bars')!, cfg, pred, fits.map((f) => f.sigma));
+      const w = +q('w').value;
+      o('w').textContent = `${Math.round(100 * w)}%`;
+      const zf = zs(pred), zm = zs(momNow);
+      const blend = zf.map((z, i) => w * z + (1 - w) * zm[i]);
+      const order = blend.map((v, i) => i).sort((a, b) => blend[b] - blend[a]);
+      out('rank').innerHTML = order
+        .map((i, pos) => `<tr><td>${pos + 1}</td><td>${cfg.names[i]}</td><td>${pct(pred[i], 2)}</td><td>${pct(momNow[i], 2)}</td><td>${pct(momF[T - 1][i], 1)}</td><td>${pct(revF[T - 1][i], 1)}</td><td>${blend[i].toFixed(2)}</td></tr>`)
+        .join('');
+    };
+    [...sliders, 'w'].forEach((k) => q(k).addEventListener('input', update));
+    root.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach((b) =>
+      b.addEventListener('click', () => {
+        const v = PRESETS[b.dataset.preset!];
+        sliders.forEach((k, i) => (q(k).value = String(v[i])));
+        root.querySelectorAll<HTMLButtonElement>('[data-preset]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+        update();
+      }),
+    );
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="sector"]').forEach(init);
+</script>

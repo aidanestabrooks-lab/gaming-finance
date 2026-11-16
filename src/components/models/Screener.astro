@@ -1,0 +1,289 @@
+---
+/**
+ * Stock screener over the site's large-cap universe (eleven sectors, filed
+ * trailing-twelve-month fundamentals and one year of market data, refreshed
+ * daily at build time). Filters, sortable columns, and a composite score built
+ * from z-scores across five pillars (value, growth, quality, momentum, low
+ * risk) with user weights, computed universe-wide or sector-neutral. A
+ * screener ranks; it does not value.
+ */
+import { universe, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
+interface Props {
+  id: string;
+  title?: string;
+  note?: string;
+}
+const { id, title = 'Large-cap screener: filters, pillars, composite score', note } = Astro.props;
+
+const stocks = universe.stocks.map((s) => ({
+  t: s.ticker, n: s.name, sec: s.sector, px: s.price,
+  mc: s.marketCap != null ? Math.round(s.marketCap / 1e8) / 10 : null, // $B
+  pe: s.pe, ev: s.evEbitda, fcf: s.fcfYield, g: s.revGrowth, m: s.ebitMargin, roe: s.roe, ic: s.interestCoverage, nd: s.netDebtEbitda,
+  beta: s.beta1y, vol: s.vol1y, mom: s.mom12_1, pos: s.pos52w, r1: s.ret1m, r12: s.ret12m,
+}));
+const cfg = { stocks, sectors: universe.sectors };
+const defaultNote = `${stocks.length} US large caps across ${universe.sectors.length} sectors. Prices and market statistics as of ${shortDate(universe.asOf)}; fundamentals are the latest filed trailing twelve months and balance sheet. Edit any filter or weight; the table and the score update immediately.`;
+const FILTERS: { k: string; label: string; step: string }[] = [
+  { k: 'mc', label: 'Market cap ($B)', step: '1' }, { k: 'pe', label: 'P/E (TTM)', step: '1' }, { k: 'ev', label: 'EV / EBITDA', step: '0.5' },
+  { k: 'fcf', label: 'FCF yield', step: '0.005' }, { k: 'g', label: 'Revenue growth', step: '0.01' }, { k: 'm', label: 'EBIT margin', step: '0.01' },
+  { k: 'nd', label: 'Net debt / EBITDA', step: '0.1' }, { k: 'beta', label: 'Beta (1y)', step: '0.1' }, { k: 'vol', label: 'Volatility (1y)', step: '0.01' },
+  { k: 'mom', label: '12-1 momentum', step: '0.01' }, { k: 'pos', label: '52-week position (0–1)', step: '0.05' },
+];
+---
+
+<div class="model" data-model="screener" id={id}>
+  <script is:inline type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
+  <div class="model-head">
+    <p class="model-title">{title}</p>
+    <p class="model-note">{note ?? defaultNote}</p>
+  </div>
+
+  <p class="sub">Sectors</p>
+  <div class="btn-row chips" data-chips>
+    {universe.sectors.map((s) => <button class="btn small" type="button" data-chip={s} aria-pressed="true">{s}</button>)}
+    <button class="btn small ghost" type="button" data-chip-all>All</button>
+    <button class="btn small ghost" type="button" data-chip-none>None</button>
+  </div>
+
+  <p class="sub">Filters (leave blank for no bound; ratios as decimals, 0.05 = 5%)</p>
+  <div class="controls filters">
+    {FILTERS.map((f) => (
+      <label class="ctl"><span class="lab"><span>{f.label}</span></span>
+        <span class="pair"><input type="number" step={f.step} placeholder="min" data-min={f.k} aria-label={`${f.label} minimum`} /><input type="number" step={f.step} placeholder="max" data-max={f.k} aria-label={`${f.label} maximum`} /></span>
+      </label>
+    ))}
+  </div>
+
+  <p class="sub">Composite score: pillar weights</p>
+  <div class="controls">
+    <label class="ctl"><span class="lab"><span>Value (low P/E, low EV/EBITDA, high FCF yield)</span><output data-o="wv">1.0</output></span><input type="range" min="0" max="2" step="0.1" value="1" data-in="wv" /></label>
+    <label class="ctl"><span class="lab"><span>Growth (revenue growth)</span><output data-o="wg">1.0</output></span><input type="range" min="0" max="2" step="0.1" value="1" data-in="wg" /></label>
+    <label class="ctl"><span class="lab"><span>Quality (margin, ROE, coverage, low leverage)</span><output data-o="wq">1.0</output></span><input type="range" min="0" max="2" step="0.1" value="1" data-in="wq" /></label>
+    <label class="ctl"><span class="lab"><span>Momentum (12-1, 52-week position)</span><output data-o="wm">1.0</output></span><input type="range" min="0" max="2" step="0.1" value="1" data-in="wm" /></label>
+    <label class="ctl"><span class="lab"><span>Low risk (low beta, low volatility)</span><output data-o="wr">1.0</output></span><input type="range" min="0" max="2" step="0.1" value="1" data-in="wr" /></label>
+    <label class="ctl"><span class="lab"><span>Z-scores computed</span></span>
+      <select data-in="neutral"><option value="universe" selected>Across the whole universe</option><option value="sector">Within each sector (sector-neutral)</option></select>
+    </label>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">Stocks passing filters</div><div class="v" data-out="count">–</div></div>
+    <div class="stat"><div class="k">Top decile by score</div><div class="v small" data-out="topdec">–</div></div>
+    <div class="stat"><div class="k">Export</div><div class="v"><button class="btn small" type="button" data-csv>Download CSV</button></div></div>
+  </div>
+
+  <div class="table-scroll">
+    <table class="screen">
+      <thead>
+        <tr>
+          <th data-sort="t">Ticker</th><th data-sort="n">Name</th><th data-sort="sec">Sector</th><th data-sort="mc">Mkt cap $B</th><th data-sort="pe">P/E</th><th data-sort="ev">EV/EBITDA</th>
+          <th data-sort="fcf">FCF yld</th><th data-sort="g">Rev g</th><th data-sort="m">EBIT m</th><th data-sort="nd">ND/EBITDA</th><th data-sort="beta">Beta</th><th data-sort="vol">Vol</th>
+          <th data-sort="mom">12-1 mom</th><th data-sort="pos">52w pos</th><th data-sort="score">Score</th>
+        </tr>
+      </thead>
+      <tbody data-out="rows"></tbody>
+    </table>
+  </div>
+  <p class="readout">Score = weighted average of pillar z-scores; each pillar is the mean z-score of its metrics, winsorized at ±3, with the sign set so that higher is better. A metric that is undefined for a stock (negative earnings, no debt, no interest expense) is left out of that stock's pillar and marked “·”. Click a column header to sort.</p>
+
+  <DataNote
+    sources={[
+      { name: 'Yahoo Finance: prices and filed fundamentals (TTM income statement and cash flow, latest quarterly balance sheet)', asOf: universe.asOf, url: 'https://finance.yahoo.com/' },
+    ]}
+    note="Derived: P/E and EV/EBITDA from market capitalization at the latest close; beta and volatility from one year of daily returns versus SPY; 12-1 momentum skips the most recent month. Universe is a fixed list of large caps chosen for sector coverage, not an index."
+  />
+</div>
+
+<style>
+  .sub {
+    font-family: var(--sans);
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 1rem 0 0.4rem;
+  }
+  .chips .btn[aria-pressed='false'] {
+    opacity: 0.55;
+  }
+  .filters .pair {
+    display: flex;
+    gap: 0.35rem;
+  }
+  .filters .pair input {
+    width: 100%;
+    min-width: 0;
+    font: inherit;
+    font-family: var(--mono);
+    padding: 0.3rem 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  .stat .v.small {
+    font-size: 0.8rem;
+    font-weight: 500;
+    line-height: 1.4;
+  }
+  .screen th[data-sort] {
+    cursor: pointer;
+    user-select: none;
+  }
+  .screen th[data-sort][aria-sort='ascending']::after {
+    content: ' ▲';
+  }
+  .screen th[data-sort][aria-sort='descending']::after {
+    content: ' ▼';
+  }
+  .screen td {
+    font-family: var(--mono);
+  }
+  .screen td:nth-child(2),
+  .screen td:nth-child(3) {
+    font-family: var(--sans);
+    white-space: nowrap;
+    max-width: 14em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .screen td.score {
+    font-weight: 600;
+  }
+</style>
+
+<script>
+  interface Row {
+    t: string; n: string; sec: string; px: number; mc: number | null; pe: number | null; ev: number | null; fcf: number | null; g: number | null; m: number | null;
+    roe: number | null; ic: number | null; nd: number | null; beta: number; vol: number; mom: number; pos: number; r1: number; r12: number;
+    score?: number; pillars?: Record<string, number | null>;
+  }
+  interface Cfg { stocks: Row[]; sectors: string[] }
+
+  // Pillar definitions: metric key and sign (+1 higher is better, -1 lower is better).
+  const PILLARS: Record<string, [keyof Row, number][]> = {
+    wv: [['pe', -1], ['ev', -1], ['fcf', 1]],
+    wg: [['g', 1]],
+    wq: [['m', 1], ['roe', 1], ['ic', 1], ['nd', -1]],
+    wm: [['mom', 1], ['pos', 1]],
+    wr: [['beta', -1], ['vol', -1]],
+  };
+  const NUM: (keyof Row)[] = ['mc', 'pe', 'ev', 'fcf', 'g', 'm', 'nd', 'beta', 'vol', 'mom', 'pos'];
+
+  function zscores(rows: Row[], key: keyof Row, groups: Map<string, Row[]> | null): Map<string, number | null> {
+    const out = new Map<string, number | null>();
+    const sets = groups ? [...groups.values()] : [rows];
+    for (const set of sets) {
+      const vals = set.map((r) => r[key] as number | null).filter((v): v is number => v != null && Number.isFinite(v));
+      const m = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+      const sd = vals.length > 1 ? Math.sqrt(vals.reduce((a, b) => a + (b - m) ** 2, 0) / (vals.length - 1)) : 0;
+      for (const r of set) {
+        const v = r[key] as number | null;
+        out.set(r.t, v == null || !Number.isFinite(v) || sd === 0 ? (v == null ? null : 0) : Math.max(-3, Math.min(3, (v - m) / sd)));
+      }
+    }
+    return out;
+  }
+
+  const f = {
+    pct: (v: number | null, d = 1) => (v == null ? '·' : `${(100 * v).toFixed(d)}%`),
+    num: (v: number | null, d = 1) => (v == null ? '·' : v.toFixed(d)),
+  };
+
+  function init(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.querySelector('script[data-cfg]')!.textContent!);
+    const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+    const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const chips = [...root.querySelectorAll<HTMLButtonElement>('[data-chip]')];
+    let sortKey: keyof Row | 'score' = 'score', sortDir = -1;
+    let current: Row[] = [];
+
+    const bound = (k: string, which: 'min' | 'max') => {
+      const el = root.querySelector<HTMLInputElement>(`[data-${which}="${k}"]`)!;
+      return el.value === '' ? null : +el.value;
+    };
+
+    const update = () => {
+      const weights: Record<string, number> = {};
+      for (const k of Object.keys(PILLARS)) {
+        weights[k] = +q(k).value;
+        o(k).textContent = weights[k].toFixed(1);
+      }
+      const neutral = q('neutral').value === 'sector';
+      const active = new Set(chips.filter((c) => c.getAttribute('aria-pressed') === 'true').map((c) => c.dataset.chip!));
+      // Filter.
+      let rows = cfg.stocks.filter((r) => active.has(r.sec));
+      for (const k of NUM) {
+        const lo = bound(k, 'min'), hi = bound(k, 'max');
+        if (lo == null && hi == null) continue;
+        rows = rows.filter((r) => {
+          const v = r[k] as number | null;
+          if (v == null) return false;
+          return (lo == null || v >= lo) && (hi == null || v <= hi);
+        });
+      }
+      // Score on the filtered set (universe-wide or sector-neutral z-scores).
+      const groups = neutral ? rows.reduce((m, r) => (m.get(r.sec)?.push(r) ?? m.set(r.sec, [r]), m), new Map<string, Row[]>()) : null;
+      const zcache = new Map<string, Map<string, number | null>>();
+      for (const defs of Object.values(PILLARS)) for (const [k] of defs) if (!zcache.has(k)) zcache.set(k, zscores(rows, k, groups));
+      for (const r of rows) {
+        r.pillars = {};
+        let num = 0, den = 0;
+        for (const [p, defs] of Object.entries(PILLARS)) {
+          const zsP = defs.map(([k, sign]) => { const z = zcache.get(k)!.get(r.t); return z == null ? null : sign * z; }).filter((z): z is number => z != null);
+          const pz = zsP.length ? zsP.reduce((a, b) => a + b, 0) / zsP.length : null;
+          r.pillars[p] = pz;
+          if (pz != null && weights[p] > 0) { num += weights[p] * pz; den += weights[p]; }
+        }
+        r.score = den ? num / den : 0;
+      }
+      rows.sort((a, b) => {
+        const va = a[sortKey as keyof Row] as number | string | null, vb = b[sortKey as keyof Row] as number | string | null;
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        return (typeof va === 'string' ? va.localeCompare(vb as string) : va - (vb as number)) * sortDir;
+      });
+      current = rows;
+      out('count').textContent = `${rows.length} of ${cfg.stocks.length}`;
+      const byScore = [...rows].sort((a, b) => b.score! - a.score!);
+      const top = byScore.slice(0, Math.max(1, Math.round(rows.length / 10)));
+      const tally = top.reduce((m, r) => m.set(r.sec, (m.get(r.sec) ?? 0) + 1), new Map<string, number>());
+      out('topdec').textContent = top.length ? [...tally.entries()].sort((a, b) => b[1] - a[1]).map(([s, c]) => `${s} ${c}`).join(' · ') + ` (${top.map((r) => r.t).join(', ')})` : '–';
+      out('rows').innerHTML = rows
+        .map((r) => `<tr><td>${r.t}</td><td title="${r.n}">${r.n}</td><td>${r.sec}</td><td>${f.num(r.mc, 0)}</td><td>${f.num(r.pe)}</td><td>${f.num(r.ev)}</td><td>${f.pct(r.fcf)}</td><td>${f.pct(r.g)}</td><td>${f.pct(r.m)}</td><td>${f.num(r.nd)}</td><td>${f.num(r.beta, 2)}</td><td>${f.pct(r.vol, 0)}</td><td>${f.pct(r.mom)}</td><td>${f.num(r.pos, 2)}</td><td class="score" style="color:${r.score! >= 0 ? 'var(--pos)' : 'var(--neg)'}">${r.score!.toFixed(2)}</td></tr>`)
+        .join('');
+      root.querySelectorAll<HTMLElement>('th[data-sort]').forEach((th) => th.setAttribute('aria-sort', th.dataset.sort === sortKey ? (sortDir > 0 ? 'ascending' : 'descending') : 'none'));
+    };
+
+    root.querySelectorAll<HTMLElement>('th[data-sort]').forEach((th) =>
+      th.addEventListener('click', () => {
+        const k = th.dataset.sort as keyof Row | 'score';
+        if (sortKey === k) sortDir = -sortDir;
+        else { sortKey = k; sortDir = k === 't' || k === 'n' || k === 'sec' ? 1 : -1; }
+        update();
+      }),
+    );
+    chips.forEach((c) => c.addEventListener('click', () => { c.setAttribute('aria-pressed', String(c.getAttribute('aria-pressed') !== 'true')); update(); }));
+    root.querySelector('[data-chip-all]')!.addEventListener('click', () => { chips.forEach((c) => c.setAttribute('aria-pressed', 'true')); update(); });
+    root.querySelector('[data-chip-none]')!.addEventListener('click', () => { chips.forEach((c) => c.setAttribute('aria-pressed', 'false')); update(); });
+    root.querySelectorAll<HTMLInputElement>('[data-min],[data-max],[data-in]').forEach((i) => i.addEventListener('input', update));
+    root.querySelector('[data-csv]')!.addEventListener('click', () => {
+      const cols: (keyof Row)[] = ['t', 'n', 'sec', 'px', 'mc', 'pe', 'ev', 'fcf', 'g', 'm', 'roe', 'ic', 'nd', 'beta', 'vol', 'mom', 'pos', 'r1', 'r12', 'score'];
+      const esc = (v: unknown) => (v == null ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+      const csv = [cols.join(','), ...current.map((r) => cols.map((c) => esc(c === 'score' ? r.score?.toFixed(3) : r[c])).join(','))].join('\n');
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'gaming-finance-screen.csv';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+    update();
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-model="screener"]').forEach(init);
+</script>

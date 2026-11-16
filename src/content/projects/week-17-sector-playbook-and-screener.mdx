@@ -1,0 +1,190 @@
+---
+title: "The Sector Playbook: Factor Forecasts and a Screener"
+date: 2026-11-15
+week: 17
+tags: [Markets, CFA, Firms]
+summary: "Which sectors win when the ten-year backs up, when credit spreads blow out, when oil spikes? The answer is a regression, not an opinion. The first model below estimates every sector's macro betas from monthly data, turns any scenario you set into a ranked conditional forecast, and tests a momentum rule out of sample. The second is a screener over eighty large caps with a composite score you weight yourself."
+takeaways:
+  - "A sector's macro beta is an estimate with a standard error. Act on the betas whose t-statistics clear two, and treat the rest as noise with a sign."
+  - "A scenario forecast is conditional: it says what the model expects if the shock happens. The hard part, forecasting the shock, is not in the model, and the residual band shows how much is left unexplained even when the factors are known."
+  - "Cross-sectional momentum in eleven sectors is weak evidence at best. Report the out-of-sample rank correlation, not the backtest's best year."
+  - "A screener ranks on what is measurable today. It cannot tell you whether a cheap stock is cheap for a reason; it tells you which names deserve the valuation work."
+sources:
+  - title: "CFA Institute: Multiple Regression (Level II Quantitative Methods)"
+    url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/multiple-regression
+  - title: "CFA Institute: Principles of Asset Allocation (Level III)"
+    url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/principles-asset-allocation
+  - title: "Jegadeesh, N. & Titman, S. (1993). Returns to buying winners and selling losers"
+    url: https://www.jstor.org/stable/2328882
+  - title: "Moskowitz, T. & Grinblatt, M. (1999). Do industries explain momentum?"
+    url: https://www.jstor.org/stable/222452
+  - title: "Fama, E. & French, K. (1993). Common risk factors in the returns on stocks and bonds"
+    url: https://www.sciencedirect.com/science/article/pii/0304405X93900235
+  - title: "State Street SPDR sector ETFs"
+    url: https://www.ssga.com/us/en/intermediary/etfs/fund-finder?g=sector
+  - title: "FRED: 10-year Treasury, Moody's Baa minus 10-year spread, broad dollar index, WTI crude, VIX"
+    url: https://fred.stlouisfed.org/series/BAA10Y
+  - title: "Yahoo Finance: prices and filed fundamentals"
+    url: https://finance.yahoo.com/
+---
+import SectorModel from '../../components/models/SectorModel.astro';
+import Screener from '../../components/models/Screener.astro';
+import { sectorPanel, universe, fred, shortDate } from '../../lib/data';
+import { solve, mean } from '../../lib/stats';
+
+export const p = sectorPanel();
+export const n = p.months.length;
+export const rel = p.ret.map((row, t) => row.map((r) => r - p.spy[t]));
+export const ols = (X, y) => {
+  const k = X[0].length + 1;
+  const rows = X.map((r) => [1, ...r]);
+  const A = Array.from({ length: k }, () => Array(k).fill(0));
+  const b = Array(k).fill(0);
+  rows.forEach((r, i) => { for (let a = 0; a < k; a++) { b[a] += r[a] * y[i]; for (let c = 0; c < k; c++) A[a][c] += r[a] * r[c]; } });
+  const beta = solve(A, b);
+  const fit = rows.map((r) => r.reduce((s, v, j) => s + v * beta[j], 0));
+  const sse = y.reduce((s, v, i) => s + (v - fit[i]) ** 2, 0);
+  const my = mean(y);
+  const sst = y.reduce((s, v) => s + (v - my) ** 2, 0);
+  const s2 = sse / (y.length - k);
+  const se = beta.map((_, j) => { const e = Array(k).fill(0); e[j] = 1; return Math.sqrt(Math.max(0, s2 * solve(A.map((r) => [...r]), e)[j])); });
+  return { beta, t: beta.map((v, j) => (se[j] ? v / se[j] : 0)), r2: sst ? 1 - sse / sst : 0, sigma: Math.sqrt(s2) };
+};
+export const fits = p.tickers.map((_, s) => ols(p.fac, rel.map((r) => r[s])));
+export const idx = (name) => p.names.indexOf(name);
+export const B = (name, j) => fits[idx(name)].beta[j + 1];
+export const T = (name, j) => fits[idx(name)].t[j + 1];
+export const pick = (j, sign) => { let best = 0; fits.forEach((f, i) => { if (sign * f.beta[j + 1] > sign * fits[best].beta[j + 1]) best = i; }); return { name: p.names[best], beta: fits[best].beta[j + 1], t: fits[best].t[j + 1] }; };
+export const rateHi = pick(0, 1);
+export const rateLo = pick(0, -1);
+export const creditLo = pick(1, -1);
+export const creditHi = pick(1, 1);
+export const usdLo = pick(2, -1);
+export const usdHi = pick(2, 1);
+export const oilHi = pick(3, 1);
+export const oilLo = pick(3, -1);
+export const vixLo = pick(4, -1);
+export const vixHi = pick(4, 1);
+export const sig = fits.reduce((c, f) => c + f.t.slice(1).filter((t) => Math.abs(t) >= 1.96).length, 0);
+export const r2max = Math.max(...fits.map((f) => f.r2));
+export const r2min = Math.min(...fits.map((f) => f.r2));
+export const r2best = p.names[fits.findIndex((f) => f.r2 === r2max)];
+export const r2worst = p.names[fits.findIndex((f) => f.r2 === r2min)];
+export const fmtB = (b, d = 2) => `${b >= 0 ? '+' : '−'}${(100 * Math.abs(b)).toFixed(d)}%`;
+export const tf = (t) => (Math.abs(t) >= 1.96 ? 'significant' : 'not significant');
+export const sgn = (b) => (b >= 0 ? 'positive' : 'negative');
+export const scenario = (shock) => {
+  const pred = fits.map((f) => f.beta[0] + shock.reduce((a, x, j) => a + x * f.beta[j + 1], 0));
+  const order = pred.map((v, i) => i).sort((a, b) => pred[b] - pred[a]);
+  return order.map((i) => ({ name: p.names[i], v: pred[i], s: fits[i].sigma }));
+};
+export const hike = scenario([0.5, 0.25, Math.log(1.03), 0, 5]);
+export const stress = scenario([-0.3, 1.0, Math.log(1.04), Math.log(0.85), 12]);
+export const mom = (() => {
+  const X = [], y = [];
+  for (let t = 11; t < n - 1; t++) for (let s = 0; s < p.tickers.length; s++) {
+    let c = 1; for (let k = t - 11; k <= t - 1; k++) c *= 1 + rel[k][s];
+    X.push([c - 1, rel[t][s]]); y.push(rel[t + 1][s]);
+  }
+  return { ...ols(X, y), n: y.length };
+})();
+export const lv = p.levels;
+export const nStocks = universe.stocks.length;
+export const noPe = universe.stocks.filter((s) => s.pe == null).length;
+export const medPe = (() => { const xs = universe.stocks.map((s) => s.pe).filter((v) => v != null).sort((a, b) => a - b); return xs[Math.floor(xs.length / 2)]; })();
+export const topMom = [...universe.stocks].sort((a, b) => b.mom12_1 - a.mom12_1)[0];
+export const botMom = [...universe.stocks].sort((a, b) => a.mom12_1 - b.mom12_1)[0];
+export const qarp = universe.stocks.filter((s) => s.ebitMargin > 0.15 && s.roe > 0.15 && s.pe != null && s.pe < 25 && s.netDebtEbitda != null && s.netDebtEbitda < 2).sort((a, b) => a.pe - b.pe);
+export const lowvol = universe.stocks.filter((s) => s.beta1y < 0.8 && s.vol1y < 0.28 && s.fcfYield != null && s.fcfYield > 0.035).sort((a, b) => b.fcfYield - a.fcfYield);
+export const list = (xs, k = 6) => xs.slice(0, k).map((s) => s.ticker).join(', ');
+export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
+
+## The setup
+
+Sector allocation is the part of portfolio construction where macro views are supposed to turn into positions, and it is usually done by narrative: rates up, buy banks; oil up, buy energy; recession coming, buy staples and utilities. Each of those is a testable claim about a regression coefficient. This week estimates the coefficients, shows their standard errors, and then does the thing narratives never do, which is check how the model would have done out of sample.
+
+The universe is the eleven SPDR sector ETFs, which together are the S&P 500. For each sector the dependent variable is its monthly return in excess of SPY, so the model explains relative performance, not the market's direction. The five explanatory variables are the month's change in the 10-year Treasury yield, the change in the Baa corporate spread over Treasuries, the log change of the broad trade-weighted dollar index, the log change of WTI crude, and the change in the VIX. The sample runs from {p.months[0]} to {p.months[n - 1]}, {n} months, which is as far back as the Communication Services ETF exists. All of it is re-estimated in your browser from a panel the site rebuilds every day.
+
+## Why sectors load differently on macro factors
+
+The betas are not arbitrary. Each has an economic mechanism, and knowing the mechanism is what lets you decide whether a coefficient that the data cannot pin down is worth believing anyway.
+
+**Rates.** A sector's sensitivity to the 10-year yield comes from two places: the duration of its cash flows and the duration of its liabilities. Utilities and real estate have long, stable, regulated or contracted cash flows and carry a lot of debt, so they trade like long bonds; when yields rise, their discount rate rises and their refinancing cost rises at the same time. Technology has long-duration cash flows too, but of a different kind, far in the future and growing, so its rate beta depends on whether the move in yields reflects growth, which helps, or inflation, which does not. Financials run the other way: banks earn a spread between what they pay on deposits and what they earn on loans, and a steeper or higher curve widens that spread, so they tend to have a positive rate beta even though a hiking cycle eventually hurts their borrowers.
+
+**Credit.** The Baa spread over Treasuries is the market's price of default risk. Sectors full of levered, cyclical balance sheets, consumer discretionary, industrials, materials and real estate, are hurt when that price rises, because their own borrowing costs rise and because a widening spread is usually a recession signal. Consumer staples, health care and utilities sell things people buy in a recession, so their relative return tends to be positive exactly when the spread widens. The credit beta is in effect a recession beta.
+
+**The dollar.** Roughly 40% of S&P 500 revenue comes from outside the United States, but the share differs sharply by sector. Technology and materials earn a large fraction abroad and are hurt when the dollar strengthens, both in translation and in competitiveness. Utilities, real estate and financials are nearly all domestic. Energy and materials carry an extra channel: commodities are priced in dollars, so a stronger dollar usually means a weaker commodity price, which compounds the translation effect.
+
+**Oil.** The energy sector's earnings are a direct function of the oil price, so its beta to WTI is the largest and most reliable coefficient in the table. The other side of the ledger is fuel-intensive industries: airlines inside industrials, chemicals inside materials, and consumer discretionary when gasoline eats into household budgets.
+
+**Volatility.** The VIX is not a fundamental, it is a measure of fear, but it captures the defensive rotation that none of the other factors fully explain. When volatility spikes, investors sell what they own the most of and what has the highest beta, and they buy the sectors that behave like bonds. A negative VIX beta is a cyclical sector; a positive one is a defensive sector, whatever its balance sheet says.
+
+<SectorModel id="sectors" />
+
+## Reading the heatmap, sector by sector
+
+Level II teaches multiple regression as $y_t = \alpha + \beta_1 x_{1t} + \dots + \beta_5 x_{5t} + \varepsilon_t$, with each $\hat\beta_j$ the partial effect of factor $j$ holding the others fixed, and $t_j = \hat\beta_j / \mathrm{se}(\hat\beta_j)$ as the test of whether that effect is distinguishable from zero. Across the fifty-five sector-factor pairs, {sig} currently clear $|t| \ge 1.96$, which are starred on the heatmap. The rest have a sign and not much else, which is itself useful: it says which narratives the data cannot support.
+
+Start with the bond proxies. Real Estate's rate beta is {fmtB(B('Real Estate', 0))} per percentage point of 10-year yield (t = {T('Real Estate', 0).toFixed(1)}, {tf(T('Real Estate', 0))}) and Utilities' is {fmtB(B('Utilities', 0))} (t = {T('Utilities', 0).toFixed(1)}). Both have {sgn(B('Utilities', 4))} VIX betas, {fmtB(B('Utilities', 4), 2)} and {fmtB(B('Real Estate', 4), 2)} per point, which is the defensive bid showing up in the data. Utilities' credit beta of {fmtB(B('Utilities', 1))} per percentage point of Baa spread rounds out the picture of a sector that behaves like a long bond with a recession hedge attached.
+
+Financials are the mirror image on rates: a beta of {fmtB(B('Financials', 0))} per percentage point (t = {T('Financials', 0).toFixed(1)}). Their credit beta is {fmtB(B('Financials', 1))}, which is the loan book: banks are long credit whether they like it or not. Energy's oil beta is {fmtB(B('Energy', 3))} per unit of log change, so a 10% move in WTI is worth about {fmtB(B('Energy', 3) * Math.log(1.1), 1)} of relative return, with a t-statistic of {T('Energy', 3).toFixed(1)}; it is the coefficient in the table you can take to the bank. Its VIX beta of {fmtB(B('Energy', 4), 2)} per point reminds you that energy is still a cyclical.
+
+Consumer Staples show the recession profile in every column: a credit beta of {fmtB(B('Consumer Staples', 1))}, a VIX beta of {fmtB(B('Consumer Staples', 4), 2)}, and a rate beta of {fmtB(B('Consumer Staples', 0))}. Consumer Discretionary is the opposite, with a credit beta of {fmtB(B('Consumer Discretionary', 1))} and a VIX beta of {fmtB(B('Consumer Discretionary', 4), 2)}. Technology's dollar beta is {fmtB(B('Technology', 2))} per unit of log change in the index (t = {T('Technology', 2).toFixed(1)}), and Materials' is {fmtB(B('Materials', 2))}; the sector with the most negative dollar beta in the current estimate is {usdLo.name}, and the most positive is {usdHi.name}.
+
+Summarizing the extremes: the sector that gains most relative to the market when the 10-year rises is {rateHi.name} ({fmtB(rateHi.beta)}, t = {rateHi.t.toFixed(1)}) and the one that loses most is {rateLo.name} ({fmtB(rateLo.beta)}, t = {rateLo.t.toFixed(1)}). A widening Baa spread hurts {creditLo.name} most ({fmtB(creditLo.beta)}) and favors {creditHi.name} ({fmtB(creditHi.beta)}). Oil helps {oilHi.name} and hurts {oilLo.name}. A rising VIX is worst for {vixLo.name} and best for {vixHi.name}.
+
+The R² column is deliberately unflattering: it runs from {r2min.toFixed(2)} for {r2worst} to {r2max.toFixed(2)} for {r2best}. Macro factors explain a minority of monthly relative sector returns, and for several sectors a small minority. The residual σ next to it is the honest size of what they do not explain, and it is the width of the band on the scenario chart.
+
+## A worked scenario: the hike-pricing regime
+
+Prediction markets currently price a Federal Reserve hike at the December meeting (Week 7 and Week 9 run on those quotes), and the 10-year already sits at {lv.DGS10.toFixed(2)}%. Take the "Hike shock" preset: the 10-year up 50 basis points, the Baa spread 25 basis points wider, the dollar 3% stronger, oil flat, the VIX up 5 points. The forecaster multiplies each sector's betas by that vector and adds the intercept:
+
+$$
+\hat y_s = \hat\alpha_s + \hat\beta_{s,\text{10y}}\,(0.50) + \hat\beta_{s,\text{Baa}}\,(0.25) + \hat\beta_{s,\text{USD}}\,\ln(1.03) + \hat\beta_{s,\text{VIX}}\,(5)
+$$
+
+With the current estimates the predicted winners are {hike[0].name} ({fmtB(hike[0].v)}), {hike[1].name} ({fmtB(hike[1].v)}) and {hike[2].name} ({fmtB(hike[2].v)}), and the predicted losers are {hike[10].name} ({fmtB(hike[10].v)}), {hike[9].name} ({fmtB(hike[9].v)}) and {hike[8].name} ({fmtB(hike[8].v)}). The spread between the best and worst sector is {fmtB(hike[0].v - hike[10].v, 1)} for one month, which sounds tradeable until you look at the bands: the residual σ for {hike[0].name} is {pct(hike[0].s)} and for {hike[10].name} it is {pct(hike[10].s)}. The forecast spread is about {((hike[0].v - hike[10].v) / Math.sqrt(hike[0].s ** 2 + hike[10].s ** 2)).toFixed(1)} standard deviations of the combined noise. That is a lean, not a certainty.
+
+Now switch to "Credit stress": the 10-year down 30 basis points as investors flee to Treasuries, the Baa spread 100 basis points wider, the dollar up 4%, oil down 15%, the VIX up 12. The ranking inverts almost entirely: {stress[0].name} ({fmtB(stress[0].v)}) and {stress[1].name} ({fmtB(stress[1].v)}) lead, {stress[10].name} ({fmtB(stress[10].v)}) and {stress[9].name} ({fmtB(stress[9].v)}) trail. The same model, two scenarios, opposite portfolios. Which is the point: a sector view is a macro view wearing a label, and the label does not carry any information the macro view did not.
+
+## Why a scenario forecast is conditional
+
+Three things about that equation matter more than the ranking it produces.
+
+It conditions on the shock. If the 10-year rises 50 basis points next month, the model says which sectors should outperform; it says nothing about whether the 10-year will rise. The factor forecast is your job. Today the Baa spread is {lv.BAA10Y.toFixed(2)} percentage points, the broad dollar index {lv.DTWEXBGS.toFixed(1)}, WTI ${lv.DCOILWTICO.toFixed(0)} and the VIX {lv.VIXCLS.toFixed(1)}; the presets are round-number shocks from those levels, not predictions.
+
+It carries the residual. Even with the factors known, the band around each bar is one residual standard deviation, and most bars overlap. The out-of-sample check under the chart refits the model each month from {p.months[36]} on and ranks the sectors using that month's realized factor changes. If the betas were unstable the hit rate would sit at 50% and the rank correlation at zero; the numbers reported there are the right summary of how much the betas are worth, and they are smaller than the in-sample fit.
+
+It is linear. A 100 basis point move is treated as twice a 50 basis point move, and a rise in yields driven by growth is treated the same as one driven by inflation. Level II's own caveat applies: regressions describe the sample's range, and this sample contains a hiking cycle, a pandemic, an inflation shock and an AI capex boom, but not everything, and not in the combinations that will arrive next.
+
+## Momentum, honestly
+
+The second model asks a different question: ignoring macro, does a sector's own recent performance predict its next month? Jegadeesh and Titman found in 1993 that US stocks with the best prior-year returns, skipping the latest month, kept outperforming for the next three to twelve months, and that the latest month tended to reverse. Moskowitz and Grinblatt showed in 1999 that much of that effect was industry momentum: buying the winning industries and selling the losing ones captured most of the profit. Sector ETFs are the cheapest way to express that finding.
+
+Pooled across all eleven sectors and every month since the window could be estimated, the momentum coefficient is {mom.beta[1].toFixed(3)} (t = {mom.t[1].toFixed(1)}) and the one-month reversal coefficient is {mom.beta[2].toFixed(3)} (t = {mom.t[2].toFixed(1)}), on {mom.n.toLocaleString()} sector-months. A positive momentum coefficient agrees with the literature in sign; a positive reversal coefficient would disagree with it. Whether either is {tf(mom.t[1])} at conventional levels is reported next to it.
+
+Those are the full-sample numbers. The ones that matter are out of sample: the rank correlation between what the expanding-window model predicted and what happened the next month, and the backtest of holding the top three sectors against equal weight. Both are in the panel, and both deserve the caveat printed under them. Eleven assets and roughly a hundred months is a small panel in two ways. Cross-sectionally, a rank correlation on eleven items is coarse: moving one sector by one place changes it by a visible amount. Through time, a hundred months contains perhaps three or four distinct regimes, so the backtest's result is dominated by whichever sector led for longest. The published momentum evidence uses thousands of stocks and decades of data. A rank correlation of 0.05 here is consistent with that evidence and also consistent with nothing; it is not a trading rule.
+
+The blended ranking at the bottom of the panel standardizes the two forecasts and mixes them with a weight you set. At 100% scenario it is the macro model; at 0% it is momentum. In between it is a transparent version of what most sector-rotation products sell, with the difference that you can see both ingredients and both sets of diagnostics.
+
+## The screener
+
+The second panel moves from sectors to stocks. The universe is {nStocks} large caps spread across the same eleven sectors, with trailing-twelve-month fundamentals as filed and one year of market data as of {shortDate(universe.asOf)}. {noPe} of them currently have no P/E because trailing earnings are negative; the screener leaves those out of the value pillar rather than pretending a negative multiple means cheap. The median P/E in the universe is {medPe.toFixed(1)}. The strongest 12-1 momentum belongs to {topMom.name} at {fmtB(topMom.mom12_1, 0)} and the weakest to {botMom.name} at {fmtB(botMom.mom12_1, 0)}.
+
+<Screener id="screen" />
+
+Five pillars, each a z-score averaged over its metrics: value (P/E, EV/EBITDA, free-cash-flow yield), growth (revenue growth), quality (EBIT margin, return on equity, interest coverage, leverage), momentum (12-1 return and position in the 52-week range) and low risk (beta and volatility). The weights are yours. The sector-neutral toggle computes every z-score within the stock's own sector, so a utility is compared with utilities and a chip designer with chip designers; universe-wide scoring instead lets whole sectors rank high or low, which is what you want if the sector model above has given you a view. Filters apply before scoring, so a screen for leverage below two times EBITDA and positive free-cash-flow yield scores only the survivors.
+
+Two screens worth running. The first is quality at a reasonable price: EBIT margin above 15%, return on equity above 15%, net debt below two times EBITDA, and a P/E below 25. On today's data {qarp.length} of the {nStocks} names pass, and sorted by P/E the cheapest are {list(qarp)}{qarp.length > 6 ? ', and others' : ''}. Set the quality weight to 2 and value to 1.5, zero the momentum pillar, and the score orders them by how much quality you get per unit of multiple. The second is a low-volatility income screen: beta below 0.8, volatility below 28%, free-cash-flow yield above 3.5%. {lowvol.length} names pass, led by free-cash-flow yield: {list(lowvol)}. Weight low risk at 2 and value at 1, and the result is a list of businesses that fund their own payouts and do not move with the index, which is the raw material for the income sleeve of a portfolio.
+
+Read what the screens return against the sector model. If the quality screen is dominated by energy names, it is telling you that oil-sensitive cash flows are currently cheap relative to their quality, and the energy row of the heatmap tells you what you would be exposed to. If the low-volatility screen is full of staples and utilities, you are buying the sectors with the highest credit and VIX betas, which protect in a downturn and lag in a melt-up.
+
+A screener does one thing: it ranks on what is measurable today. It does not know that a cheap name is cheap because a lawsuit is pending, that a high-momentum name just closed an acquisition that changes every trailing number, or that a high free-cash-flow yield is a one-time working-capital release. Treat the top decile as the list that deserves the Week 6 reverse DCF and the Week 10 credit lens, not as a portfolio.
+
+## Limitations
+
+Everything above is estimated on monthly data with ordinary least squares, which assumes the errors are uncorrelated and have constant variance. Financial returns violate both, mildly, so the t-statistics are somewhat too generous. The factors are contemporaneous: the model relates this month's sector return to this month's factor changes, which makes it a tool for scenario analysis, not a forecast of returns from today's information. The sample is short because of the Communication Services ETF's 2018 listing, and it includes a reclassification of several large technology names into that sector, which changed what the ETFs hold. The screener's fundamentals are trailing and as filed, so a company that restated or changed its fiscal year can carry a stale number for a quarter, and a fixed universe of {nStocks} names chosen for sector coverage is not an index and has survivorship built in. None of this makes the models wrong. It makes them what they are: a structured way to state and test a view, with the uncertainty attached.
+
+## What this means for investors
+
+Most sector narratives are claims about betas, and the betas can be estimated. Some are strong enough to act on, many are not, and the regression tells you which is which. When you hold a macro view, run it through the scenario tool and look at the band, not just the ranking: if the band of your favored sector overlaps the band of the one you would sell, you do not have a sector trade, you have a factor bet with a sector label, and you should size it like one. The hike-pricing scenario currently favors {hike[0].name} over {hike[10].name} by about {fmtB(hike[0].v - hike[10].v, 1)} a month, with roughly a {((hike[0].v - hike[10].v) / Math.sqrt(hike[0].s ** 2 + hike[10].s ** 2)).toFixed(1)}-sigma margin; that is the kind of number to carry into position sizing. Momentum in sectors is real in the literature and faint in this sample; if you use it, use it as a tiebreaker. And when the screener hands you a short list, remember that it got there by arithmetic on last year's numbers. The work that creates value starts where the screener stops.
