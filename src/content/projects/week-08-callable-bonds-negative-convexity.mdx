@@ -14,16 +14,30 @@ sources:
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/valuation-analysis-bonds-embedded-options
   - title: "Federal Reserve Bank of New York: Agency MBS operations"
     url: https://www.newyorkfed.org/markets/domestic-market-operations/monetary-policy-implementation/agency-mortgage-backed-securities
+  - title: "FRED: Treasury constant-maturity yields (DGS1–DGS30), Board of Governors H.15"
+    url: https://fred.stlouisfed.org/series/DGS5
 ---
 import RateTree from '../../components/models/RateTree.astro';
+import { parYield, curveAsOf, yieldVol, shortDate } from '../../lib/data';
+
+export const asOf = shortDate(curveAsOf());
+export const y1 = parYield(1).toFixed(2);
+export const y5 = parYield(5).toFixed(2);
+export const y10 = parYield(10).toFixed(2);
+export const slope = (parYield(5) - parYield(1)).toFixed(2);
+export const shape = parYield(5) > parYield(1) ? 'upward sloping' : parYield(5) < parYield(1) ? 'inverted' : 'flat';
+export const vol = (100 * yieldVol('DGS5')).toFixed(0);
+export const cpn = (Math.round(parYield(5) * 8) / 8).toFixed(3);
 
 ## The setup
 
-A corporate borrower issued a five-year bond with a 5% coupon when rates were higher. It is callable at par starting next year. The curve has since rallied. The borrower would love to refinance, and every holder of that bond is now short the option that lets them do it.
+A corporate borrower issues a five-year bond today at a coupon of {cpn}%, the current five-year Treasury par yield rounded to an eighth, so the option-free version prices near par. It is callable at par starting next year. If the curve rallies from here, the borrower will refinance, and every holder of that bond is short the option that lets them do it.
+
+The curve the model is calibrated to is the Treasury par curve of {asOf}: {y1}% at one year, {y5}% at five, {y10}% at ten. It is {shape} between one and five years by {slope} percentage points. Rate volatility is not assumed; it is the realized volatility of the five-year yield over the past year, {vol}% in lognormal terms.
 
 The Level II toolkit for this is the **binomial interest rate tree**. Build a lattice of one-year forward rates that reprices today's par curve, assume rates move up or down each year with lognormal volatility, and price the bond by rolling back through the tree. At each node where the issuer can call, replace the bond's value with the lower of its value and the call price. The difference between the straight bond and the callable bond is the value of the call.
 
-<RateTree id="callable" note="Five-year annual tree, calibrated to a linear par curve between the 1-year and 5-year rates. Lognormal rates, equal up/down probabilities." />
+<RateTree id="callable" />
 
 ## Calibration
 
@@ -49,7 +63,11 @@ $$
 D_{\text{eff}} = \frac{P_{-} - P_{+}}{2\,P_0\,\Delta y}, \qquad C_{\text{eff}} = \frac{P_{-} + P_{+} - 2P_0}{P_0\,(\Delta y)^2}
 $$
 
-With the default inputs, the callable's effective duration is well below the straight bond's and its effective convexity is negative. Drag the 5-year rate down 100 basis points and the duration falls further: the bond is converging on its call price and has stopped behaving like a bond.
+With today's curve and volatility, the callable's effective duration is well below the straight bond's and its effective convexity is negative. Type a five-year par yield 100 basis points below {y5}% into the curve table and the duration falls further: the bond is converging on its call price and has stopped behaving like a bond. The market-price slider starts at the callable's model value, so the OAS reads near zero; lower the price and the OAS widens one for one with the discount.
+
+## Why the calibration curve is live
+
+Negative convexity is a statement about the *level* of rates relative to the coupon. The same callable is nearly a straight bond when the curve sits well above its coupon and nearly a cash substitute when the curve sits well below it. Because the panel reads the Treasury curve on every rebuild, the model's starting point is wherever the market actually is on {asOf}, and the price-yield chart below is centered on that point rather than on a textbook example.
 
 ## The price-yield chart
 

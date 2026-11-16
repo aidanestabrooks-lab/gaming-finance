@@ -1,13 +1,18 @@
 ---
 /**
  * Two-venue arbitrage on the same binary event: buy YES where it is cheap and
- * NO where YES is expensive. Each venue has its own fee rate on the Kalshi-style
- * quadratic schedule (set 0 for a venue without trading fees). Returns are
- * annualized over the days to resolution because the capital is locked.
+ * NO where YES is expensive. Defaults come from the data snapshot: the next Fed
+ * decision's outcomes quoted on Kalshi (quadratic 7% taker fee, prices in
+ * cents) and Polymarket (no trading fee, prices in dollars). Both directions
+ * are evaluated with each venue's real ask on that leg. Returns are annualized
+ * over the days to resolution because the capital is locked.
  */
+import { fedOutcomes, kalshi, polymarket, daysBetween, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
 interface Props {
   id: string;
-  event: string;
+  event?: string;
   venueA?: string;
   venueB?: string;
   yesA?: number;
@@ -17,98 +22,181 @@ interface Props {
   days?: number;
   title?: string;
 }
-const {
-  id, event, venueA = 'Venue A', venueB = 'Venue B', yesA = 54, yesB = 60, feeA = 0.07, feeB = 0, days = 30,
-  title = 'Cross-venue arbitrage',
-} = Astro.props;
+const { id, event, venueA = 'Kalshi', venueB = 'Polymarket', yesA, yesB, feeA = 0.07, feeB = 0, days, title = 'Cross-venue arbitrage' } = Astro.props;
+
+const fo = fedOutcomes();
+const toC = (x: number | null | undefined, fallback: number) => (x == null ? fallback : Math.min(99, Math.max(1, Math.round(x))));
+// Each outcome: Kalshi yes ask / no ask (cents) and Polymarket yes ask / no ask (cents, no ask = 1 − best bid on YES).
+const outcomes = fo.outcomes
+  .filter((o) => o.kalshi || o.poly)
+  .map((o) => ({
+    key: o.key,
+    label: o.label,
+    yesA: toC(o.kalshi?.yes_ask, 50),
+    noA: toC(o.kalshi?.no_ask, 50),
+    yesB: toC(o.poly?.bestAsk != null ? o.poly.bestAsk * 100 : null, 50),
+    noB: toC(o.poly?.bestBid != null ? (1 - o.poly.bestBid) * 100 : null, 50),
+    bidA: o.kalshi?.yes_bid ?? null,
+    bidB: o.poly?.bestBid != null ? Math.round(o.poly.bestBid * 100) : null,
+    volA: o.kalshi?.volume ?? null,
+    volB: o.poly?.volume ?? null,
+  }));
+// Default to the most actively traded outcome, so the table shows a live spread instead of a 0/1 tail.
+const defaultIdx = outcomes.reduce((bi, o, i) => ((o.volA ?? 0) > (outcomes[bi].volA ?? 0) ? i : bi), 0);
+const dflt = outcomes[defaultIdx];
+const dDays = days ?? Math.max(1, daysBetween(kalshi.fetched, fo.kalshiClose || polymarket.fedDecision()?.endDate || kalshi.fetched));
+const eventTitle = event ?? `${fo.event} — the same five outcomes quoted on ${venueA} and ${venueB}`;
+const useData = yesA == null && yesB == null;
 ---
 
 <div class="model" data-model="cross" id={id} data-a={venueA} data-b={venueB}>
+  <script type="application/json" data-cfg set:html={JSON.stringify({ outcomes, defaultIdx })} />
   <div class="model-head">
     <p class="model-title">{title}</p>
-    <p class="model-note">{event}</p>
+    <p class="model-note">{eventTitle}</p>
   </div>
   <div class="controls">
+    {
+      useData && outcomes.length > 0 && (
+        <label class="ctl">
+          <span class="lab"><span>Outcome</span></span>
+          <select data-in="oc">
+            {outcomes.map((o, i) => <option value={i} selected={i === defaultIdx}>{o.label}</option>)}
+          </select>
+        </label>
+      )
+    }
     <label class="ctl">
-      <span class="lab"><span>{venueA} YES price</span><output data-o="ya">{yesA}¢</output></span>
-      <input type="range" min="1" max="99" value={yesA} data-in="ya" />
+      <span class="lab"><span>{venueA} YES ask</span><output data-o="ya">–</output></span>
+      <input type="range" min="1" max="99" value={yesA ?? dflt?.yesA ?? 54} data-in="ya" />
     </label>
     <label class="ctl">
-      <span class="lab"><span>{venueB} YES price</span><output data-o="yb">{yesB}¢</output></span>
-      <input type="range" min="1" max="99" value={yesB} data-in="yb" />
+      <span class="lab"><span>{venueA} NO ask</span><output data-o="na">–</output></span>
+      <input type="range" min="1" max="99" value={yesA != null ? 100 - yesA : dflt?.noA ?? 46} data-in="na" />
     </label>
     <label class="ctl">
-      <span class="lab"><span>{venueA} fee rate</span><output data-o="fa">{(feeA * 100).toFixed(2)}%</output></span>
+      <span class="lab"><span>{venueB} YES ask</span><output data-o="yb">–</output></span>
+      <input type="range" min="1" max="99" value={yesB ?? dflt?.yesB ?? 60} data-in="yb" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>{venueB} NO ask (1 − YES bid)</span><output data-o="nb">–</output></span>
+      <input type="range" min="1" max="99" value={yesB != null ? 100 - yesB : dflt?.noB ?? 40} data-in="nb" />
+    </label>
+    <label class="ctl">
+      <span class="lab"><span>{venueA} fee rate</span><output data-o="fa">–</output></span>
       <input type="range" min="0" max="0.1" step="0.0025" value={feeA} data-in="fa" />
     </label>
     <label class="ctl">
-      <span class="lab"><span>{venueB} fee rate</span><output data-o="fb">{(feeB * 100).toFixed(2)}%</output></span>
+      <span class="lab"><span>{venueB} fee rate</span><output data-o="fb">–</output></span>
       <input type="range" min="0" max="0.1" step="0.0025" value={feeB} data-in="fb" />
     </label>
     <label class="ctl">
-      <span class="lab"><span>Days to resolution</span><output data-o="d">{days}</output></span>
-      <input type="range" min="1" max="365" value={days} data-in="d" />
+      <span class="lab"><span>Days to resolution</span><output data-o="d">–</output></span>
+      <input type="range" min="1" max="365" value={dDays} data-in="d" />
     </label>
     <label class="ctl">
       <span class="lab"><span>Contracts</span><output data-o="c">500</output></span>
       <input type="range" min="1" max="5000" step="1" value="500" data-in="c" />
     </label>
   </div>
+  {
+    useData && outcomes.length > 0 && (
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Outcome</th><th>{venueA} bid / ask</th><th>{venueB} bid / ask</th><th>Gap (asks)</th><th>{venueA} volume</th><th>{venueB} volume</th></tr></thead>
+          <tbody data-out="quotes"></tbody>
+        </table>
+      </div>
+    )
+  }
   <div class="stats">
     <div class="stat"><div class="k">Trade</div><div class="v" data-out="trade" style="font-size: 0.95rem">–</div></div>
     <div class="stat"><div class="k">Cost per $1 of payout</div><div class="v" data-out="cost">–</div></div>
     <div class="stat"><div class="k">Locked-in profit</div><div class="v" data-out="profit">–</div></div>
     <div class="stat"><div class="k">Return on capital</div><div class="v" data-out="roc">–</div></div>
     <div class="stat"><div class="k">Annualized (simple)</div><div class="v" data-out="ann">–</div></div>
-    <div class="stat"><div class="k">Break-even spread</div><div class="v" data-out="be">–</div></div>
+    <div class="stat"><div class="k">Break-even gap</div><div class="v" data-out="be">–</div></div>
   </div>
   <p class="readout" data-out="expl"></p>
+  {
+    useData && (
+      <DataNote
+        sources={[
+          { name: 'Kalshi market data API', asOf: kalshi.fetched, url: 'https://kalshi.com' },
+          { name: 'Polymarket Gamma API', asOf: polymarket.fetched, url: 'https://polymarket.com' },
+        ]}
+        note="Build-time snapshot refreshed daily, not a live feed. Days to resolution run from the snapshot time to the Kalshi market close. Polymarket quotes are converted from dollars to cents; its NO ask is one minus the YES bid."
+      />
+    )
+  }
 </div>
 
 <script>
   import { fmt } from '../../lib/stats';
 
+  type Outcome = { key: string; label: string; yesA: number; noA: number; yesB: number; noB: number; bidA: number | null; bidB: number | null; volA: number | null; volB: number | null };
   const orderFee = (rate: number, C: number, P: number) => Math.ceil(100 * rate * C * P * (1 - P)) / 100;
+  const big = (x: number | null) => (x == null ? '–' : x >= 1e6 ? `$${(x / 1e6).toFixed(2)}M` : `$${(x / 1e3).toFixed(0)}k`);
 
   function init(root: HTMLElement) {
     const A = root.dataset.a!, B = root.dataset.b!;
+    const cfg: { outcomes: Outcome[]; defaultIdx: number } = JSON.parse(root.querySelector('[data-cfg]')!.textContent || '{"outcomes":[],"defaultIdx":0}');
     const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
     const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
-    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`);
+    const ocIn = root.querySelector<HTMLSelectElement>('[data-in="oc"]');
+
+    const load = () => {
+      if (!ocIn) return;
+      const oc = cfg.outcomes[+ocIn.value];
+      q('ya').value = String(oc.yesA); q('na').value = String(oc.noA);
+      q('yb').value = String(oc.yesB); q('nb').value = String(oc.noB);
+    };
+
+    const quotes = () => {
+      const tb = out('quotes');
+      if (!tb) return;
+      const sel = ocIn ? +ocIn.value : -1;
+      tb.innerHTML = cfg.outcomes
+        .map((oc, i) => `<tr${i === sel ? ' style="font-weight:600"' : ''}><td>${oc.label}</td><td>${oc.bidA ?? '–'}¢ / ${oc.yesA}¢</td><td>${oc.bidB ?? '–'}¢ / ${oc.yesB}¢</td><td>${Math.abs(oc.yesA - oc.yesB)}¢</td><td>${big(oc.volA)}</td><td>${big(oc.volB)}</td></tr>`)
+        .join('');
+    };
 
     const update = () => {
-      const ya = +q('ya').value / 100, yb = +q('yb').value / 100;
+      const ya = +q('ya').value / 100, na = +q('na').value / 100, yb = +q('yb').value / 100, nb = +q('nb').value / 100;
       const fa = +q('fa').value, fb = +q('fb').value;
       const d = +q('d').value, C = +q('c').value;
-      o('ya').textContent = fmt.cents(ya); o('yb').textContent = fmt.cents(yb);
+      o('ya').textContent = fmt.cents(ya); o('na').textContent = fmt.cents(na); o('yb').textContent = fmt.cents(yb); o('nb').textContent = fmt.cents(nb);
       o('fa').textContent = fmt.pct(fa, 2); o('fb').textContent = fmt.pct(fb, 2);
       o('d').textContent = String(d); o('c').textContent = String(C);
 
-      // Direction 1: YES at A, NO at B. Direction 2: YES at B, NO at A. Pick the better.
-      const d1 = { yesAt: A, noAt: B, cost: C * (ya + (1 - yb)) + orderFee(fa, C, ya) + orderFee(fb, C, 1 - yb) };
-      const d2 = { yesAt: B, noAt: A, cost: C * (yb + (1 - ya)) + orderFee(fb, C, yb) + orderFee(fa, C, 1 - ya) };
+      // Direction 1: YES at A, NO at B. Direction 2: YES at B, NO at A. Each leg at that venue's real ask.
+      const d1 = { yesAt: A, noAt: B, legs: ya + nb, cost: C * (ya + nb) + orderFee(fa, C, ya) + orderFee(fb, C, nb) };
+      const d2 = { yesAt: B, noAt: A, legs: yb + na, cost: C * (yb + na) + orderFee(fb, C, yb) + orderFee(fa, C, na) };
       const best = d1.cost <= d2.cost ? d1 : d2;
       const profit = C - best.cost;
       const roc = profit / best.cost;
       const ann = roc * (365 / d);
-      const feePer = (orderFee(fa, C, ya) + orderFee(fb, C, yb)) / C;
+      const feePer = (best.cost - C * best.legs) / C;
 
-      out('trade').textContent = `Buy YES on ${best.yesAt}, buy NO on ${best.noAt}`;
-      out('cost').textContent = fmt.usd(best.cost / C, 4);
-      const p = out('profit');
+      out('trade')!.textContent = `Buy YES on ${best.yesAt}, buy NO on ${best.noAt}`;
+      out('cost')!.textContent = fmt.usd(best.cost / C, 4);
+      const p = out('profit')!;
       p.textContent = `${profit >= 0 ? '+' : '−'}${fmt.usd(Math.abs(profit))}`;
       p.className = 'v ' + (profit > 0 ? 'pos' : profit < 0 ? 'neg' : '');
-      out('roc').textContent = fmt.pct(roc, 2);
-      out('ann').textContent = fmt.pct(ann, 1);
-      out('be').textContent = `≈ ${fmt.cents(feePer)} of price gap`;
-      out('expl').innerHTML =
+      out('roc')!.textContent = fmt.pct(roc, 2);
+      out('ann')!.textContent = fmt.pct(ann, 1);
+      out('be')!.textContent = `legs must sum below ${fmt.cents(1 - feePer)}`;
+      out('expl')!.innerHTML =
         `Payout is <strong>$1 per contract</strong> whichever way the event resolves, so the position is riskless once both legs fill. ` +
-        `The spread between venues is <strong>${fmt.cents(Math.abs(ya - yb))}</strong>; fees eat about <strong>${fmt.cents(feePer)}</strong> of it. ` +
+        `The two legs cost <strong>${fmt.cents(best.legs)}</strong> before fees; fees add about <strong>${fmt.cents(feePer)}</strong>. ` +
         (profit > 0
-          ? `Capital of <strong>${fmt.usd(best.cost)}</strong> is tied up for ${d} days to earn ${fmt.usd(profit)}.`
-          : `At this gap the fees exceed the edge; the trade loses money even though both legs are "right".`);
+          ? `Capital of <strong>${fmt.usd(best.cost)}</strong> is tied up for ${d} days to earn ${fmt.usd(profit)}, ${fmt.pct(ann, 1)} annualized.`
+          : `Crossing both spreads costs more than the gap between venues; the trade loses money even though both legs are "right".`);
+      quotes();
     };
-    ['ya', 'yb', 'fa', 'fb', 'd', 'c'].forEach((k) => q(k).addEventListener('input', update));
+    ['ya', 'na', 'yb', 'nb', 'fa', 'fb', 'd', 'c'].forEach((k) => q(k).addEventListener('input', update));
+    ocIn?.addEventListener('change', () => { load(); update(); });
     update();
   }
 

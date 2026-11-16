@@ -4,34 +4,100 @@
  * to terminal growth, reinvestment driven by a sales-to-capital ratio, Gordon
  * terminal value. Includes a WACC x g sensitivity grid and a reverse DCF that
  * solves for the growth rate implied by a market price.
+ *
+ * Defaults are observed figures for the six hyperscalers in src/data/companies.json
+ * (filed financials and prices via Yahoo Finance; Treasury yield and IG OAS via FRED),
+ * refreshed by `npm run data`. Picking a company resets every slider to its data.
  */
+import { companies, companySnapshot, waccFor, fred, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
 interface Props {
   id: string;
   title?: string;
   note?: string;
+  /** Ticker selected on load. */
   company?: string;
 }
-const { id, title = 'Multi-stage FCFF valuation', note, company = 'Hyperscaler Co.' } = Astro.props;
+const { id, title = 'Multi-stage FCFF valuation', note, company = 'MSFT' } = Astro.props;
+
+const ERP = 0.045;
+const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x));
+const round = (x: number, step: number) => Math.round(x / step) * step;
+const RANGE = {
+  rev: { min: 10, max: 1000, step: 1 },
+  g1: { min: -0.05, max: 0.7, step: 0.005 },
+  fade: { min: 0, max: 10, step: 1 },
+  gt: { min: 0, max: 0.05, step: 0.0025 },
+  m: { min: 0.02, max: 0.7, step: 0.005 },
+  t: { min: 0, max: 0.4, step: 0.005 },
+  s2c: { min: 0.2, max: 5, step: 0.01 },
+  wacc: { min: 0.04, max: 0.16, step: 0.0025 },
+  nd: { min: -300, max: 300, step: 1 },
+  sh: { min: 0.5, max: 30, step: 0.01 },
+  px: { min: 5, max: 1000, step: 1 },
+};
+const fit = (k: keyof typeof RANGE, x: number) => round(clamp(x, RANGE[k].min, RANGE[k].max), RANGE[k].step);
+
+const cfg = companies.hyperscalers.map((c) => {
+  const s = companySnapshot(c);
+  const w = waccFor(s, ERP);
+  const B = 1e9;
+  return {
+    ticker: s.ticker,
+    name: s.name,
+    // slider defaults (fitted to ranges)
+    rev: fit('rev', s.revenueTTM / B),
+    g1: fit('g1', s.revenueGrowth),
+    fade: 5,
+    gt: 0.03,
+    m: fit('m', s.ebitMargin),
+    t: fit('t', s.taxRate),
+    s2c: fit('s2c', s.salesToCapital),
+    wacc: fit('wacc', w.wacc),
+    nd: fit('nd', s.netDebt / B),
+    sh: fit('sh', s.shares / B),
+    px: fit('px', s.price),
+    // observed, unclamped
+    raw: { g1: s.revenueGrowth, m: s.ebitMargin, s2c: s.salesToCapital, wacc: w.wacc, nd: s.netDebt / B, sh: s.shares / B, px: s.price, rev: s.revenueTTM / B },
+    capm: { rf: w.rf, beta: w.beta, erp: ERP, ke: w.ke, kd: w.kd, wd: w.wd },
+    facts: {
+      mcap: s.marketCap / B, ev: (s.marketCap + s.netDebt) / B, capex: s.capexTTM / B, capexPct: s.capexTTM / s.revenueTTM,
+      da: s.daTTM / B, fy: s.fiscalYearEnd, priceDate: s.priceDate, bsDate: s.balanceSheetDate, debt: s.totalDebt / B, cash: s.cash / B,
+    },
+  };
+});
+const d0 = cfg.find((c) => c.ticker === company) ?? cfg[0];
+const fmtB = (x: number) => `${x < 0 ? '−' : ''}$${Math.abs(x).toFixed(x < 10 ? 1 : 0)}B`;
+const pct = (x: number, d = 1) => `${(100 * x).toFixed(d)}%`;
+const fyDates = companies.hyperscalers.map((c) => companySnapshot(c).fiscalYearEnd).sort();
 ---
 
-<div class="model" data-model="dcf" id={id} data-company={company}>
+<div class="model" data-model="dcf" id={id}>
   <div class="model-head">
     <p class="model-title">{title}</p>
-    <p class="model-note">{note ?? `${company} · $ billions unless noted`}</p>
+    <p class="model-note">{note ?? 'Filed financials, trailing twelve months, $ billions. Pick a company to load its figures.'}</p>
   </div>
+  <script type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
   <div class="controls">
-    <label class="ctl"><span class="lab"><span>Revenue, year 0</span><output data-o="rev">$200B</output></span><input type="range" min="10" max="800" step="5" value="200" data-in="rev" /></label>
-    <label class="ctl"><span class="lab"><span>Stage-1 growth (yrs 1–5)</span><output data-o="g1">18%</output></span><input type="range" min="-0.05" max="0.5" step="0.005" value="0.18" data-in="g1" /></label>
-    <label class="ctl"><span class="lab"><span>Fade years (stage 2)</span><output data-o="fade">5</output></span><input type="range" min="0" max="10" step="1" value="5" data-in="fade" /></label>
-    <label class="ctl"><span class="lab"><span>Terminal growth</span><output data-o="gt">3.0%</output></span><input type="range" min="0" max="0.05" step="0.0025" value="0.03" data-in="gt" /></label>
-    <label class="ctl"><span class="lab"><span>EBIT margin</span><output data-o="m">30%</output></span><input type="range" min="0.02" max="0.6" step="0.01" value="0.3" data-in="m" /></label>
-    <label class="ctl"><span class="lab"><span>Tax rate</span><output data-o="t">21%</output></span><input type="range" min="0" max="0.4" step="0.01" value="0.21" data-in="t" /></label>
-    <label class="ctl"><span class="lab"><span>Sales-to-capital (capex intensity)</span><output data-o="s2c">1.2×</output></span><input type="range" min="0.3" max="4" step="0.05" value="1.2" data-in="s2c" /></label>
-    <label class="ctl"><span class="lab"><span>WACC</span><output data-o="wacc">9.0%</output></span><input type="range" min="0.04" max="0.16" step="0.0025" value="0.09" data-in="wacc" /></label>
-    <label class="ctl"><span class="lab"><span>Net debt (cash negative)</span><output data-o="nd">−$40B</output></span><input type="range" min="-300" max="300" step="5" value="-40" data-in="nd" /></label>
-    <label class="ctl"><span class="lab"><span>Shares (billions)</span><output data-o="sh">8.0</output></span><input type="range" min="0.5" max="30" step="0.1" value="8" data-in="sh" /></label>
-    <label class="ctl"><span class="lab"><span>Market price (for reverse DCF)</span><output data-o="px">$180</output></span><input type="range" min="5" max="1000" step="5" value="180" data-in="px" /></label>
+    <label class="ctl"><span class="lab"><span>Company</span></span>
+      <select data-in="company">{cfg.map((c) => <option value={c.ticker} selected={c.ticker === d0.ticker}>{c.name} ({c.ticker})</option>)}</select>
+    </label>
+    <label class="ctl"><span class="lab"><span>Revenue, year 0 (TTM)</span><output data-o="rev">{fmtB(d0.rev)}</output></span><input type="range" min={RANGE.rev.min} max={RANGE.rev.max} step={RANGE.rev.step} value={d0.rev} data-in="rev" /></label>
+    <label class="ctl"><span class="lab"><span>Stage-1 growth (yrs 1–5)</span><output data-o="g1">{pct(d0.g1)}</output></span><input type="range" min={RANGE.g1.min} max={RANGE.g1.max} step={RANGE.g1.step} value={d0.g1} data-in="g1" /></label>
+    <label class="ctl"><span class="lab"><span>Fade years (stage 2)</span><output data-o="fade">{d0.fade}</output></span><input type="range" min={RANGE.fade.min} max={RANGE.fade.max} step={RANGE.fade.step} value={d0.fade} data-in="fade" /></label>
+    <label class="ctl"><span class="lab"><span>Terminal growth</span><output data-o="gt">{pct(d0.gt, 2)}</output></span><input type="range" min={RANGE.gt.min} max={RANGE.gt.max} step={RANGE.gt.step} value={d0.gt} data-in="gt" /></label>
+    <label class="ctl"><span class="lab"><span>EBIT margin</span><output data-o="m">{pct(d0.m)}</output></span><input type="range" min={RANGE.m.min} max={RANGE.m.max} step={RANGE.m.step} value={d0.m} data-in="m" /></label>
+    <label class="ctl"><span class="lab"><span>Tax rate</span><output data-o="t">{pct(d0.t)}</output></span><input type="range" min={RANGE.t.min} max={RANGE.t.max} step={RANGE.t.step} value={d0.t} data-in="t" /></label>
+    <label class="ctl"><span class="lab"><span>Sales-to-capital (capex intensity)</span><output data-o="s2c">{d0.s2c.toFixed(2)}×</output></span><input type="range" min={RANGE.s2c.min} max={RANGE.s2c.max} step={RANGE.s2c.step} value={d0.s2c} data-in="s2c" /></label>
+    <label class="ctl"><span class="lab"><span>WACC</span><output data-o="wacc">{pct(d0.wacc, 2)}</output></span><input type="range" min={RANGE.wacc.min} max={RANGE.wacc.max} step={RANGE.wacc.step} value={d0.wacc} data-in="wacc" /></label>
+    <label class="ctl"><span class="lab"><span>Net debt (cash negative)</span><output data-o="nd">{fmtB(d0.nd)}</output></span><input type="range" min={RANGE.nd.min} max={RANGE.nd.max} step={RANGE.nd.step} value={d0.nd} data-in="nd" /></label>
+    <label class="ctl"><span class="lab"><span>Shares (billions)</span><output data-o="sh">{d0.sh.toFixed(2)}</output></span><input type="range" min={RANGE.sh.min} max={RANGE.sh.max} step={RANGE.sh.step} value={d0.sh} data-in="sh" /></label>
+    <label class="ctl"><span class="lab"><span>Market price (for reverse DCF)</span><output data-o="px">${d0.px}</output></span><input type="range" min={RANGE.px.min} max={RANGE.px.max} step={RANGE.px.step} value={d0.px} data-in="px" /></label>
   </div>
+  <p class="readout" data-out="facts">–</p>
+  <p class="readout" data-out="capm">–</p>
+  <p class="readout" data-out="raw"></p>
   <div class="stats">
     <div class="stat"><div class="k">PV of stage FCFF</div><div class="v" data-out="pvf">–</div></div>
     <div class="stat"><div class="k">PV of terminal value</div><div class="v" data-out="pvt">–</div><div class="k" data-out="tvshare">–</div></div>
@@ -50,6 +116,14 @@ const { id, title = 'Multi-stage FCFF valuation', note, company = 'Hyperscaler C
   <div class="table-scroll">
     <table class="sens"><thead data-out="shead"></thead><tbody data-out="sbody"></tbody></table>
   </div>
+  <DataNote
+    sources={[
+      { name: 'Yahoo Finance fundamentals (filed financials, TTM and latest fiscal year)', asOf: fyDates[fyDates.length - 1], url: 'https://finance.yahoo.com/' },
+      { name: 'Yahoo Finance prices', asOf: d0.facts.priceDate },
+      { name: 'FRED DGS10 (10-year Treasury) and BAMLC0A0CM (IG corporate OAS)', asOf: fred.asOf('DGS10'), url: 'https://fred.stlouisfed.org/series/DGS10' },
+    ]}
+    note={`Derived: WACC from CAPM with a ${pct(ERP)} equity risk premium, beta from one year of daily returns against SPY, cost of debt = 10-year Treasury + IG OAS, weights at market values; sales-to-capital = incremental revenue in the latest fiscal year ÷ (capex − D&A + working-capital build), falling back to revenue ÷ invested capital. Snapshot refreshed ${shortDate(companies.fetched)}.`}
+  />
 </div>
 
 <style>
@@ -62,6 +136,12 @@ const { id, title = 'Multi-stage FCFF valuation', note, company = 'Hyperscaler C
   import { fmt, bisect } from '../../lib/stats';
 
   interface In { rev: number; g1: number; fade: number; gt: number; m: number; t: number; s2c: number; wacc: number; nd: number; sh: number; px: number }
+  interface Cfg extends In {
+    ticker: string; name: string;
+    raw: { g1: number; m: number; s2c: number; wacc: number; nd: number; sh: number; px: number; rev: number };
+    capm: { rf: number; beta: number; erp: number; ke: number; kd: number; wd: number };
+    facts: { mcap: number; ev: number; capex: number; capexPct: number; da: number; fy: string; priceDate: string; bsDate: string; debt: number; cash: number };
+  }
 
   function value(i: In, g1 = i.g1, wacc = i.wacc, gt = i.gt) {
     const N = 5 + i.fade;
@@ -90,26 +170,49 @@ const { id, title = 'Multi-stage FCFF valuation', note, company = 'Hyperscaler C
     const ev = pvf + pvt;
     const eq = ev - i.nd;
     const ps = eq / i.sh;
-    return { rows, pvf, pvt, ev, eq, ps, tv };
+    return { rows, pvf, pvt, ev, eq, ps, tv, roic };
   }
 
+  const B = (x: number, d?: number) => `${x < 0 ? '−' : ''}$${Math.abs(x).toFixed(d ?? (Math.abs(x) < 10 ? 1 : 0))}B`;
+
   function init(root: HTMLElement) {
+    const cfg: Cfg[] = JSON.parse(root.querySelector('[data-cfg]')!.textContent!);
     const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
     const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
     const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
     const keys = ['rev', 'g1', 'fade', 'gt', 'm', 't', 's2c', 'wacc', 'nd', 'sh', 'px'] as const;
+    const sel = root.querySelector<HTMLSelectElement>('[data-in="company"]')!;
+    const current = () => cfg.find((c) => c.ticker === sel.value) ?? cfg[0];
+
+    const load = () => {
+      const c = current();
+      keys.forEach((k) => (q(k).value = String(c[k])));
+      const f = c.facts;
+      out('facts').innerHTML = `<strong>${c.name}</strong>: market cap ${B(f.mcap)}, enterprise value ${B(f.ev)} (debt ${B(f.debt)}, cash ${B(f.cash)} at ${f.bsDate}); TTM capex ${B(f.capex)} = ${fmt.pct(f.capexPct, 1)} of revenue, D&amp;A ${B(f.da)}; fiscal year ended ${f.fy}; price as of ${f.priceDate}.`;
+      const p = c.capm;
+      out('capm').innerHTML = `WACC build: r<sub>f</sub> ${fmt.pct(p.rf, 2)} + β ${p.beta.toFixed(2)} × ERP ${fmt.pct(p.erp, 1)} = k<sub>e</sub> ${fmt.pct(p.ke, 2)}; k<sub>d</sub> ${fmt.pct(p.kd, 2)} pre-tax; debt weight ${fmt.pct(p.wd, 1)} → WACC ${fmt.pct(c.raw.wacc, 2)}.`;
+      const notes: string[] = [];
+      const r = c.raw;
+      if (Math.abs(r.g1 - c.g1) > 0.0026) notes.push(`observed revenue growth ${fmt.pct(r.g1, 1)} (latest fiscal year vs prior) clamped to ${fmt.pct(c.g1, 1)}`);
+      if (Math.abs(r.s2c - c.s2c) > 0.006) notes.push(`observed sales-to-capital ${r.s2c.toFixed(2)}× clamped to ${c.s2c.toFixed(2)}× (a tiny or negative reinvestment base makes the ratio unstable)`);
+      if (Math.abs(r.m - c.m) > 0.003) notes.push(`observed EBIT margin ${fmt.pct(r.m, 1)} clamped to ${fmt.pct(c.m, 1)}`);
+      if (Math.abs(r.nd - c.nd) > 0.6) notes.push(`observed net debt ${B(r.nd)} clamped to ${B(c.nd)}`);
+      if (Math.abs(r.px - c.px) > 0.6) notes.push(`observed price $${r.px.toFixed(2)} clamped to $${c.px}`);
+      if (Math.abs(r.rev - c.rev) > 0.6) notes.push(`observed TTM revenue ${B(r.rev)} clamped to ${B(c.rev)}`);
+      out('raw').textContent = notes.length ? `Clamped to slider ranges: ${notes.join('; ')}.` : 'All sliders start at the observed figures (no clamping needed).';
+    };
 
     const update = () => {
       const i = Object.fromEntries(keys.map((k) => [k, +q(k).value])) as unknown as In;
-      o('rev').textContent = `$${i.rev}B`; o('g1').textContent = fmt.pct(i.g1, 1); o('fade').textContent = String(i.fade); o('gt').textContent = fmt.pct(i.gt, 2);
-      o('m').textContent = fmt.pct(i.m, 0); o('t').textContent = fmt.pct(i.t, 0); o('s2c').textContent = `${i.s2c.toFixed(2)}×`; o('wacc').textContent = fmt.pct(i.wacc, 2);
-      o('nd').textContent = `${i.nd < 0 ? '−' : ''}$${Math.abs(i.nd)}B`; o('sh').textContent = i.sh.toFixed(1); o('px').textContent = fmt.usd(i.px, 0);
+      o('rev').textContent = B(i.rev); o('g1').textContent = fmt.pct(i.g1, 1); o('fade').textContent = String(i.fade); o('gt').textContent = fmt.pct(i.gt, 2);
+      o('m').textContent = fmt.pct(i.m, 1); o('t').textContent = fmt.pct(i.t, 1); o('s2c').textContent = `${i.s2c.toFixed(2)}×`; o('wacc').textContent = fmt.pct(i.wacc, 2);
+      o('nd').textContent = B(i.nd); o('sh').textContent = i.sh.toFixed(2); o('px').textContent = fmt.usd(i.px, 0);
 
       const v = value(i);
-      out('pvf').textContent = `$${v.pvf.toFixed(0)}B`;
-      out('pvt').textContent = Number.isNaN(v.pvt) ? 'n/a (WACC ≤ g)' : `$${v.pvt.toFixed(0)}B`;
-      out('tvshare').textContent = Number.isNaN(v.pvt) ? '' : `${fmt.pct(v.pvt / v.ev, 0)} of EV`;
-      out('ev').textContent = Number.isNaN(v.ev) ? '–' : `$${v.ev.toFixed(0)}B`;
+      out('pvf').textContent = B(v.pvf);
+      out('pvt').textContent = Number.isNaN(v.pvt) ? 'n/a (WACC ≤ g)' : B(v.pvt);
+      out('tvshare').textContent = Number.isNaN(v.pvt) ? '' : `${fmt.pct(v.pvt / v.ev, 0)} of EV · ROIC ${fmt.pct(v.roic, 1)}`;
+      out('ev').textContent = Number.isNaN(v.ev) ? '–' : B(v.ev);
       out('ps').textContent = Number.isNaN(v.ps) ? '–' : fmt.usd(v.ps, 2);
       const up = v.ps / i.px - 1;
       const ue = out('up');
@@ -138,6 +241,8 @@ const { id, title = 'Multi-stage FCFF valuation', note, company = 'Hyperscaler C
         .join('');
     };
     keys.forEach((k) => q(k).addEventListener('input', update));
+    sel.addEventListener('change', () => { load(); update(); });
+    load();
     update();
   }
 

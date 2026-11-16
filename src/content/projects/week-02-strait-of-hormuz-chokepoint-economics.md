@@ -3,7 +3,7 @@ title: "Chokepoint Economics: What the Strait of Hormuz Does to Your Energy Hold
 date: 2026-08-07
 week: 2
 tags: [Geopolitics, Markets]
-summary: "Roughly a fifth of the world's seaborne oil passes through a strait a few dozen kilometers wide. The threat to close it is a bargaining chip that is rarely used, and understanding why tells you how to think about energy risk premia."
+summary: "Roughly a fifth of the world's oil consumption, and a quarter of its seaborne oil trade, passes through a strait a few dozen kilometers wide. The threat to close it is a bargaining chip that is rarely used, and understanding why tells you how to think about energy risk premia."
 takeaways:
   - "The threat to close a chokepoint is worth more unused than used. The actor who closes it loses its own export revenue and invites a military response, so the equilibrium is persistent threat, rare action."
   - "Oil markets price the probability of disruption, not the disruption itself. A rise in the geopolitical risk premium can reverse in days when the threat is not carried out."
@@ -12,14 +12,16 @@ takeaways:
 sources:
   - title: "U.S. Energy Information Administration: World Oil Transit Chokepoints"
     url: https://www.eia.gov/international/analysis/special-topics/World_Oil_Transit_Chokepoints
+  - title: "EIA: World Oil Transit Chokepoints, Table 1 (last updated March 3, 2026)"
+    url: https://www.eia.gov/international/content/analysis/special_topics/World_Oil_Transit_Chokepoints
 charts:
-  - title: "Share of global seaborne oil trade by chokepoint"
+  - title: "Oil flows through maritime chokepoints, 2024"
     type: bar
-    labels: ["Hormuz", "Malacca", "Suez and SUMED", "Bab el-Mandeb", "Danish Straits", "Turkish Straits"]
+    labels: ["Malacca", "Hormuz", "Cape of Good Hope", "Danish Straits", "Suez and SUMED", "Bab el-Mandeb", "Turkish Straits", "Panama Canal"]
     series:
-      - name: "Share of seaborne oil (percent)"
-        data: [21, 23, 9, 9, 5, 3]
-    note: "Illustrative figures for layout testing. Replace with sourced data (EIA publishes annual estimates)."
+      - name: "Crude oil and petroleum products, million b/d (EIA, 2024)"
+        data: [22.5, 20.7, 9.3, 4.9, 4.8, 4.1, 3.6, 2.0]
+    note: "Source: U.S. EIA, World Oil Transit Chokepoints, Table 1 (updated March 3, 2026), calendar year 2024. World maritime oil trade was 79.7 million b/d in 2024, so Hormuz carried about 26 percent of seaborne oil. Cape of Good Hope is a route, not a chokepoint. Turkish Straits is the Dardanelles figure. Panama Canal is fiscal year 2024 (Oct 2023 to Sep 2024). EIA first-half 2025 figures: Malacca 23.2, Hormuz 20.9, Cape 9.1."
 ---
 
 ## The setup

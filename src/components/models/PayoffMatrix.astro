@@ -192,9 +192,9 @@ const { id, rowPlayer, colPlayer, rows, cols, payoffs, title = 'Normal-form solv
     const update = () => {
       const s = solve(read(root));
       out('pure').textContent = s.pure.length ? s.pure.map(([i, j]) => `(${rows[i]}, ${cols[j]})`).join('; ') : 'none';
-      out('p').textContent = s.mixed ? s.p.toFixed(3) : Number.isNaN(s.p) ? 'undefined' : `${s.p.toFixed(2)} (outside (0,1))`;
-      out('q').textContent = s.mixed ? s.q.toFixed(3) : Number.isNaN(s.q) ? 'undefined' : `${s.q.toFixed(2)} (outside (0,1))`;
-      out('ev').textContent = s.mixed ? `${s.evRow.toFixed(2)}, ${s.evCol.toFixed(2)}` : '–';
+      out('p').textContent = s.mixed ? s.p.toFixed(3) : Number.isNaN(s.p) ? 'none (indifference has no solution)' : `${s.p.toFixed(2)} (outside (0,1))`;
+      out('q').textContent = s.mixed ? s.q.toFixed(3) : Number.isNaN(s.q) ? 'none (indifference has no solution)' : `${s.q.toFixed(2)} (outside (0,1))`;
+      out('ev').textContent = s.mixed ? `${s.evRow.toFixed(2)}, ${s.evCol.toFixed(2)}` : 'no mixed equilibrium';
       draw(svg, s, rows, cols);
     };
     root.querySelectorAll('input').forEach((i) => i.addEventListener('input', update));

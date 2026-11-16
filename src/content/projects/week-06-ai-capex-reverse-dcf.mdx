@@ -3,7 +3,7 @@ title: "What Does the Market Believe About AI Capex? A Reverse DCF"
 date: 2026-09-04
 week: 6
 tags: [Firms, CFA, Markets]
-summary: "Hyperscalers are spending at a rate that makes capex intensity the single most important input in their valuation. A multi-stage free-cash-flow model shows why: the sales-to-capital ratio decides whether growth creates or destroys value. Run it forward, then run it backward to see what growth the price already assumes."
+summary: "Hyperscalers are spending at a rate that makes capex intensity the single most important input in their valuation. A multi-stage free-cash-flow model, loaded with the filed financials and market prices of Microsoft, Alphabet, Amazon, Meta, Nvidia and Oracle, shows why: the sales-to-capital ratio decides whether growth creates or destroys value. Run it forward, then run it backward to see what growth the price already assumes."
 takeaways:
   - "Growth only adds value when return on invested capital exceeds the cost of capital. Capex intensity (sales-to-capital) is where that condition lives in the model."
   - "Terminal value is usually two thirds or more of enterprise value. A valuation is a bet on the terminal assumptions far more than on the next five years."
@@ -14,12 +14,24 @@ sources:
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/free-cash-flow-valuation
   - title: "Damodaran, A. Valuation data and spreadsheets"
     url: https://pages.stern.nyu.edu/~adamodar/
+  - title: "Company 10-K and 10-Q filings via SEC EDGAR (financials as reported)"
+    url: https://www.sec.gov/edgar/search/
+  - title: "FRED: 10-year Treasury constant maturity (DGS10) and ICE BofA US Corporate OAS (BAMLC0A0CM)"
+    url: https://fred.stlouisfed.org/series/DGS10
 ---
 import DcfModel from '../../components/models/DcfModel.astro';
+import { companies, companySnapshot, waccFor, fred, shortDate } from '../../lib/data';
+
+export const snaps = companies.hyperscalers.map((c) => { const s = companySnapshot(c); return { s, w: waccFor(s) }; });
+export const msft = snaps.find((x) => x.s.ticker === 'MSFT') ?? snaps[0];
+export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
+export const bn = (x) => `$${(x / 1e9).toFixed(x < 10e9 ? 1 : 0)}B`;
+export const totalCapex = snaps.reduce((a, x) => a + x.s.capexTTM, 0);
+export const roic = msft.s.ebitMargin * (1 - msft.s.taxRate) * msft.s.salesToCapital;
 
 ## The setup
 
-The AI build-out is the largest private capital-spending program in the history of the technology sector. The firms doing the spending are valued as if that capital will earn a return well above its cost. Whether it does is the entire question, and a free-cash-flow model is the honest way to ask it.
+The AI build-out is the largest private capital-spending program in the history of the technology sector. Over their latest trailing twelve months, the six companies below reported {bn(totalCapex)} of capital expenditure between them. They are valued as if that capital will earn a return well above its cost. Whether it does is the entire question, and a free-cash-flow model is the honest way to ask it.
 
 The Level II curriculum defines free cash flow to the firm as
 
@@ -29,7 +41,27 @@ $$
 
 The model below rolls depreciation into the margin and collapses the last two terms into a single reinvestment line driven by a **sales-to-capital ratio**: every incremental dollar of revenue requires $1 / \text{(sales-to-capital)}$ dollars of new capital. A hyperscaler building data centers has a low ratio; a software firm has a high one. That ratio is the capex-intensity dial, and it is the one that matters.
 
-<DcfModel id="hyperscaler" company="Illustrative hyperscaler" note="Illustrative inputs. $ billions. Not a forecast for any real company." />
+Every slider starts at the company's own numbers: trailing-twelve-month revenue, operating margin and effective tax rate from its filings, revenue growth over the latest fiscal year, net debt and share count from the latest balance sheet, the current share price, and a WACC built from the 10-year Treasury ({pct(fred.latest('DGS10') / 100, 2)} on {shortDate(fred.asOf('DGS10'))}), the company's one-year beta against the S&P 500, a 4.5% equity risk premium, and the investment-grade index spread for the cost of debt.
+
+<DcfModel id="hyperscaler" company="MSFT" />
+
+## The six balance sheets
+
+<div class="table-wide">
+<table>
+  <thead><tr><th>Company</th><th>TTM revenue</th><th>Revenue growth (latest FY)</th><th>EBIT margin</th><th>Capex / revenue</th><th>Sales-to-capital</th><th>WACC</th><th>Price</th></tr></thead>
+  <tbody>
+    {snaps.map((x) => (
+      <tr>
+        <td>{x.s.name} ({x.s.ticker})</td><td>{bn(x.s.revenueTTM)}</td><td>{pct(x.s.revenueGrowth)}</td><td>{pct(x.s.ebitMargin)}</td>
+        <td>{pct(x.s.capexTTM / x.s.revenueTTM)}</td><td>{x.s.salesToCapital.toFixed(2)}×</td><td>{pct(x.w.wacc, 2)}</td><td>${x.s.price.toFixed(2)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+</div>
+
+Sales-to-capital here is the incremental revenue of the latest fiscal year divided by that year's reinvestment (capex less depreciation, plus the working-capital build). It is noisy by construction: a company whose depreciation nearly matches its capex has a tiny denominator and an unstable ratio, and the model says so when it has to clamp one. The sign of the noise is the point. Capex that is not yet producing revenue drags the ratio down this year and, if the capacity sells, pushes it up later. The dial you are turning is a bet on that timing.
 
 ## How the pieces fit
 
@@ -39,7 +71,7 @@ $$
 \text{Reinvestment rate}_\infty = \frac{g}{\text{ROIC}}, \qquad \text{ROIC} = \text{margin} \times (1-\tau) \times \text{S2C}
 $$
 
-That last identity is the hinge. If ROIC falls below WACC, every dollar of growth reduces value. Set the sales-to-capital ratio to 0.6 with a 30% margin and a 21% tax rate: ROIC is 14.2%, still above a 9% WACC, and growth helps. Drop the ratio to 0.35: ROIC is 8.3%, below WACC, and you will watch the per-share value fall as you *raise* the growth rate. That is the arithmetic of value-destroying growth, and it is the risk the market is pricing when it reacts to a capex guidance raise.
+That last identity is the hinge. If ROIC falls below WACC, every dollar of growth reduces value. On Microsoft's figures (a {pct(msft.s.ebitMargin)} operating margin, a {pct(msft.s.taxRate)} tax rate, and a sales-to-capital ratio of {msft.s.salesToCapital.toFixed(2)}×) the implied ROIC on new capital is {pct(roic)}, against a WACC of {pct(msft.w.wacc, 2)}. Drag the sales-to-capital slider down until ROIC crosses WACC and you will watch the per-share value fall as you *raise* the growth rate. That is the arithmetic of value-destroying growth, and it is the risk the market is pricing when it reacts to a capex guidance raise.
 
 ## The sensitivity grid
 
@@ -47,8 +79,8 @@ The table shows value per share across WACC and terminal growth. The spread betw
 
 ## Reverse DCF
 
-Instead of guessing growth and computing a value, fix the value at the market price and solve for growth. The model does this by bisection on the stage-1 growth rate. The output is the growth the market is already paying for. If that number is higher than any historical five-year run for a company this size, you have learned something: the price embeds a forecast nobody has achieved. If it is lower than the company's current growth, the market may be pricing a capex-driven collapse in ROIC rather than a slowdown in revenue.
+Instead of guessing growth and computing a value, fix the value at the market price and solve for growth. The model does this by bisection on the stage-1 growth rate. The output is the growth the market is already paying for at today's price. Compare it with the growth the company actually delivered in its latest fiscal year, which sits on the growth slider when the page loads. If the implied number is higher than any historical five-year run for a company this size, you have learned something: the price embeds a forecast nobody has achieved. If it is lower than the company's current growth, the market may be pricing a capex-driven collapse in ROIC rather than a slowdown in revenue.
 
 ## What this means for investors
 
-Hold the model's two most sensitive inputs in your head: sales-to-capital and the fade. Every AI capex headline is a change to the first. Every "margin expansion story" is a claim about the second. Translating headlines into those two numbers, and then into value per share, is what separates a valuation from a vibe.
+Hold the model's two most sensitive inputs in your head: sales-to-capital and the fade. Every AI capex headline is a change to the first. Every "margin expansion story" is a claim about the second. Translating headlines into those two numbers, and then into value per share, is what separates a valuation from a vibe. The figures on this page refresh with each build from the companies' filings and closing prices, so the implied growth you see is the market's current bet, not a historical one.

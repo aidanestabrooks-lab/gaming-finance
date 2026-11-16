@@ -1,32 +1,60 @@
 ---
 /**
- * Binomial interest rate tree (CFA Level II fixed income). Calibrated to a par
- * curve with lognormal rate volatility, used to price an option-free bond and a
- * callable bond, solve the option-adjusted spread for a market price, and
- * compute effective duration and convexity by shifting the whole curve.
+ * Binomial interest rate tree (CFA Level II fixed income). Calibrated to the
+ * current Treasury par curve (FRED constant-maturity yields, 1 to 5 years; the
+ * 4-year point is interpolated) with lognormal rate volatility taken from the
+ * realized volatility of the 5-year yield. Prices an option-free bond and a
+ * callable bond, solves the option-adjusted spread for a market price, and
+ * computes effective duration and convexity by shifting the whole curve.
+ * Every curve point and the volatility can be overridden in the panel.
  */
+import DataNote from './DataNote.astro';
+import { parYield, curveAsOf, yieldVol, shortDate } from '../../lib/data';
+
 interface Props {
   id: string;
   title?: string;
   note?: string;
 }
 const { id, title = 'Binomial rate tree: callable bond, OAS, effective duration', note } = Astro.props;
+
+const asOf = curveAsOf();
+const par = [1, 2, 3, 4, 5].map((t) => +(parYield(t) / 100).toFixed(5));
+const vol = +yieldVol('DGS5').toFixed(3);
+const coupon = Math.round((parYield(5) / 100) * 800) / 800; // nearest eighth of a percent
+const cfg = { par, vol, coupon, asOf };
+const pct = (x: number, d = 2) => `${(100 * x).toFixed(d)}%`;
 ---
 
 <div class="model" data-model="ratetree" id={id}>
+  <script type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
   <div class="model-head">
     <p class="model-title">{title}</p>
-    {note && <p class="model-note">{note}</p>}
+    <p class="model-note">{note ?? `Five-year annual tree calibrated to the Treasury par curve of ${shortDate(asOf)}. Lognormal rates, equal up/down probabilities.`}</p>
   </div>
-  <div class="controls">
-    <label class="ctl"><span class="lab"><span>1-yr par rate</span><output data-o="y1">3.80%</output></span><input type="range" min="0.005" max="0.08" step="0.0005" value="0.038" data-in="y1" /></label>
-    <label class="ctl"><span class="lab"><span>5-yr par rate</span><output data-o="y5">4.00%</output></span><input type="range" min="0.005" max="0.08" step="0.0005" value="0.04" data-in="y5" /></label>
-    <label class="ctl"><span class="lab"><span>Rate volatility σ</span><output data-o="vol">15%</output></span><input type="range" min="0.05" max="0.4" step="0.01" value="0.15" data-in="vol" /></label>
-    <label class="ctl"><span class="lab"><span>Coupon</span><output data-o="cpn">5.00%</output></span><input type="range" min="0.01" max="0.09" step="0.0025" value="0.05" data-in="cpn" /></label>
-    <label class="ctl"><span class="lab"><span>Call price</span><output data-o="call">100.0</output></span><input type="range" min="98" max="106" step="0.25" value="100" data-in="call" /></label>
-    <label class="ctl"><span class="lab"><span>First call (year)</span><output data-o="fc">1</output></span><input type="range" min="1" max="4" step="1" value="1" data-in="fc" /></label>
-    <label class="ctl"><span class="lab"><span>Market price of callable</span><output data-o="px">101.0</output></span><input type="range" min="90" max="110" step="0.125" value="101" data-in="px" /></label>
-    <label class="ctl"><span class="lab"><span>Shock for duration (bp)</span><output data-o="dy">25</output></span><input type="range" min="5" max="100" step="5" value="25" data-in="dy" /></label>
+  <div class="two-col">
+    <div>
+      <p class="readout">Par curve the tree is calibrated to (Treasury constant-maturity yields, {shortDate(asOf)}; the 4-year point is interpolated between 3 and 5). Edit any point.</p>
+      <div class="table-scroll">
+        <table class="curve">
+          <thead><tr><th>Maturity</th>{par.map((_, i) => <th>{i + 1} yr</th>)}</tr></thead>
+          <tbody>
+            <tr>
+              <th>Par yield</th>
+              {par.map((y, i) => <td><input type="number" min="0.1" max="12" step="0.01" value={(100 * y).toFixed(2)} data-in={`p${i + 1}`} aria-label={`${i + 1}-year par yield, percent`} />%</td>)}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="controls">
+      <label class="ctl"><span class="lab"><span>Rate volatility σ (realized, 5-yr yield)</span><output data-o="vol">{pct(vol, 0)}</output></span><input type="range" min="0.05" max="0.4" step="0.005" value={vol} data-in="vol" /></label>
+      <label class="ctl"><span class="lab"><span>Coupon</span><output data-o="cpn">{pct(coupon, 3)}</output></span><input type="range" min="0.01" max="0.09" step="0.00125" value={coupon} data-in="cpn" /></label>
+      <label class="ctl"><span class="lab"><span>Call price</span><output data-o="call">100.0</output></span><input type="range" min="98" max="106" step="0.25" value="100" data-in="call" /></label>
+      <label class="ctl"><span class="lab"><span>First call (year)</span><output data-o="fc">1</output></span><input type="range" min="1" max="4" step="1" value="1" data-in="fc" /></label>
+      <label class="ctl"><span class="lab"><span>Market price of callable</span><output data-o="px">–</output></span><input type="range" min="90" max="110" step="0.125" value="100" data-in="px" /></label>
+      <label class="ctl"><span class="lab"><span>Shock for duration (bp)</span><output data-o="dy">25</output></span><input type="range" min="5" max="100" step="5" value="25" data-in="dy" /></label>
+    </div>
   </div>
   <div class="stats">
     <div class="stat"><div class="k">Option-free value</div><div class="v" data-out="vs">–</div></div>
@@ -46,7 +74,17 @@ const { id, title = 'Binomial rate tree: callable bond, OAS, effective duration'
       <div class="legend"><span><i style="background: var(--c1)"></i>Option-free bond</span><span><i style="background: var(--c2)"></i>Callable bond</span><span><i style="background: var(--muted)"></i>Call price</span></div>
     </div>
   </div>
+  <DataNote
+    sources={[{ name: 'FRED, Treasury constant-maturity par yields (DGS1–DGS30)', asOf, url: 'https://fred.stlouisfed.org/series/DGS10' }]}
+    note={`Derived: the 4-year par yield is a linear interpolation of the 3- and 5-year points; σ is the annualized standard deviation of daily log changes in the 5-year yield over the past year (${pct(vol, 1)}); the coupon is the 5-year par yield rounded to an eighth; the default market price is the callable's model value so OAS starts near zero. The bond itself is hypothetical.`}
+  />
 </div>
+
+<style>
+  .curve input[type='number'] {
+    width: 4.6rem;
+  }
+</style>
 
 <script>
   import { fmt, bisect } from '../../lib/stats';
@@ -54,8 +92,8 @@ const { id, title = 'Binomial rate tree: callable bond, OAS, effective duration'
 
   const N = 5;
 
-  /** Par curve: linear interpolation between the 1-year and 5-year rates. */
-  const parCurve = (y1: number, y5: number, shift = 0) => Array.from({ length: N }, (_, i) => y1 + ((y5 - y1) * i) / (N - 1) + shift);
+  /** Par curve from the five editable points, optionally shifted in parallel. */
+  const shifted = (par: number[], shift = 0) => par.map((y) => y + shift);
 
   /** Price a bond with coupon c on a given tree with spread s; call rule optional. */
   function priceOnTree(tree: number[][], c: number, s: number, call?: { px: number; from: number }): number {
@@ -102,17 +140,29 @@ const { id, title = 'Binomial rate tree: callable bond, OAS, effective duration'
     const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
     const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
     const svg = root.querySelector<SVGSVGElement>('svg.pc')!;
+    const cfg = JSON.parse(root.querySelector('[data-cfg]')!.textContent || '{}') as { par: number[]; vol: number; coupon: number };
+    let pxSeeded = false;
+
+    const readPar = () => [1, 2, 3, 4, 5].map((i) => Math.max(0.0005, (+q(`p${i}`).value || 100 * cfg.par[i - 1]) / 100));
 
     const update = () => {
-      const y1 = +q('y1').value, y5 = +q('y5').value, vol = +q('vol').value, c = +q('cpn').value;
-      const callPx = +q('call').value, fc = +q('fc').value, px = +q('px').value, dy = +q('dy').value / 10000;
-      o('y1').textContent = fmt.pct(y1, 2); o('y5').textContent = fmt.pct(y5, 2); o('vol').textContent = fmt.pct(vol, 0); o('cpn').textContent = fmt.pct(c, 2);
-      o('call').textContent = callPx.toFixed(1); o('fc').textContent = String(fc); o('px').textContent = px.toFixed(3); o('dy').textContent = String(Math.round(dy * 10000));
+      const par = readPar();
+      const vol = +q('vol').value, c = +q('cpn').value;
+      const callPx = +q('call').value, fc = +q('fc').value, dy = +q('dy').value / 10000;
+      o('vol').textContent = fmt.pct(vol, 1); o('cpn').textContent = fmt.pct(c, 3);
+      o('call').textContent = callPx.toFixed(1); o('fc').textContent = String(fc); o('dy').textContent = String(Math.round(dy * 10000));
 
       const call = { px: callPx, from: fc };
-      const tree = calibrate(parCurve(y1, y5), vol);
+      const tree = calibrate(par, vol);
       const vs = priceOnTree(tree, c, 0);
       const vc = priceOnTree(tree, c, 0, call);
+      if (!pxSeeded) {
+        // Start the market price at the callable's model value so the OAS reads near zero until the user moves it.
+        q('px').value = String(Math.min(110, Math.max(90, Math.round(vc * 8) / 8)));
+        pxSeeded = true;
+      }
+      const px = +q('px').value;
+      o('px').textContent = px.toFixed(3);
       out('vs').textContent = vs.toFixed(3);
       out('vc').textContent = vc.toFixed(3);
       out('vo').textContent = (vs - vc).toFixed(3);
@@ -123,13 +173,13 @@ const { id, title = 'Binomial rate tree: callable bond, OAS, effective duration'
 
       // Effective duration/convexity at constant OAS: rebuild the tree on shifted curves.
       const sOas = Number.isNaN(oas) ? 0 : oas;
-      const up = priceOnTree(calibrate(parCurve(y1, y5, dy), vol), c, sOas, call);
-      const dn = priceOnTree(calibrate(parCurve(y1, y5, -dy), vol), c, sOas, call);
+      const up = priceOnTree(calibrate(shifted(par, dy), vol), c, sOas, call);
+      const dn = priceOnTree(calibrate(shifted(par, -dy), vol), c, sOas, call);
       const p0 = priceOnTree(tree, c, sOas, call);
       const ed = (dn - up) / (2 * p0 * dy);
       const ec = (dn + up - 2 * p0) / (p0 * dy * dy);
-      const upS = priceOnTree(calibrate(parCurve(y1, y5, dy), vol), c, sOas);
-      const dnS = priceOnTree(calibrate(parCurve(y1, y5, -dy), vol), c, sOas);
+      const upS = priceOnTree(calibrate(shifted(par, dy), vol), c, sOas);
+      const dnS = priceOnTree(calibrate(shifted(par, -dy), vol), c, sOas);
       const p0S = priceOnTree(tree, c, sOas);
       out('ed').textContent = ed.toFixed(2);
       out('eds').textContent = `option-free: ${((dnS - upS) / (2 * p0S * dy)).toFixed(2)}`;
@@ -144,7 +194,7 @@ const { id, title = 'Binomial rate tree: callable bond, OAS, effective duration'
       clear(svg);
       const shifts: number[] = [], ps: number[] = [], pc: number[] = [];
       for (let b = -200; b <= 200; b += 20) {
-        const tr = calibrate(parCurve(y1, y5, b / 10000), vol);
+        const tr = calibrate(shifted(par, b / 10000), vol);
         shifts.push(b); ps.push(priceOnTree(tr, c, sOas)); pc.push(priceOnTree(tr, c, sOas, call));
       }
       const box = { left: 46, right: 350, top: 12, bottom: 205 };
@@ -158,7 +208,7 @@ const { id, title = 'Binomial rate tree: callable bond, OAS, effective duration'
       svg.appendChild(el('path', { d: path(shifts.map((s, i) => [sx(s), sy(pc[i])])), fill: 'none', stroke: 'var(--c2)', 'stroke-width': 2.5 }));
       svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 232, class: 'lbl muted', 'text-anchor': 'middle' }, 'parallel shift of the par curve (bp)'));
     };
-    ['y1', 'y5', 'vol', 'cpn', 'call', 'fc', 'px', 'dy'].forEach((k) => q(k).addEventListener('input', update));
+    ['p1', 'p2', 'p3', 'p4', 'p5', 'vol', 'cpn', 'call', 'fc', 'px', 'dy'].forEach((k) => q(k).addEventListener('input', update));
     update();
   }
 

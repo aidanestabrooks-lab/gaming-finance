@@ -14,14 +14,18 @@ sources:
     url: https://investor.tsmc.com/english
   - title: "Center for Strategic and International Studies: Semiconductors and Taiwan"
     url: https://www.csis.org/
+  - title: "TrendForce: AI Demand Drives 4Q25 Global Top 10 Foundries Revenue Up 2.6% QoQ (March 12, 2026)"
+    url: https://www.trendforce.com/presscenter/news/20260312-12965.html
+  - title: "Evertiq: AI demand lifts top foundries' Q4 revenue, Samsung gains share (TrendForce ranking table)"
+    url: https://evertiq.com/news/2026-03-12-ai-demand-lifts-top-foundries-q4-revenue-samsung-gains-share
 charts:
-  - title: "Share of leading-edge foundry capacity"
+  - title: "Share of global foundry revenue, fourth quarter 2025"
     type: bar
-    labels: ["TSMC", "Samsung", "Intel", "Others"]
+    labels: ["TSMC", "Samsung", "SMIC", "UMC", "GlobalFoundries", "All others"]
     series:
-      - name: "Share (percent)"
-        data: [70, 18, 8, 4]
-    note: "Illustrative figures for layout testing. Replace with sourced estimates and define 'leading edge' explicitly."
+      - name: "Share of foundry revenue, 4Q25 (percent, TrendForce)"
+        data: [70.4, 7.1, 5.2, 4.2, 3.8, 9.3]
+    note: "Source: TrendForce top-10 foundry revenue ranking for 4Q25, released March 12, 2026 (as published by TrendForce and tabulated by Evertiq). Definition: share of total global foundry (contract chipmaking) revenue in the quarter, all process nodes, not leading-edge capacity. TSMC 4Q25 revenue was about 33.7 billion USD; top ten combined about 46.3 billion USD, 97.0 percent of the market. 'All others' is 100 minus the five named shares. Intel Foundry does not appear in the TrendForce ranking. TSMC's share of leading-edge (5nm and below) output is higher than its overall share, but no dated third-party capacity estimate was verified for this chart."
 ---
 
 ## The setup

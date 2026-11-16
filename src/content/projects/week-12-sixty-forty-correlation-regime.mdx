@@ -3,7 +3,7 @@ title: "60/40 After the Correlation Regime Change"
 date: 2026-10-16
 week: 12
 tags: [CFA, Markets]
-summary: "For two decades bonds hedged equities because their returns were negatively correlated. In an inflation-driven regime the sign flips, and the efficient frontier moves. The optimizer below is the Level III mean-variance engine with the stock-bond correlation as a dial: watch the tangency portfolio, the capital market line, and the risk contributions of a 60/40 change with it."
+summary: "For two decades bonds hedged equities because their returns were negatively correlated. In an inflation-driven regime the sign flips, and the efficient frontier moves. The optimizer below is the Level III mean-variance engine estimated from five years of actual ETF returns, with the stock-bond correlation as a dial that starts at today's reading: watch the tangency portfolio, the capital market line, and the risk contributions of a 60/40 change with it."
 takeaways:
   - "The diversification benefit of bonds is a function of the stock-bond correlation, not of bonds' own volatility. When the correlation turns positive, 60/40's risk is nearly all equity risk."
   - "Risk contribution, not capital weight, is what you are allocating. A 60/40 portfolio in a negative-correlation regime is about 90% equity risk; in a positive regime it is closer to 100%."
@@ -14,12 +14,27 @@ sources:
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/principles-asset-allocation
   - title: "AQR: The stock/bond correlation"
     url: https://www.aqr.com/Insights/Research
+  - title: "Yahoo Finance: adjusted daily closes for SPY, EFA, IEF, LQD, GLD"
+    url: https://finance.yahoo.com/
+  - title: "FRED: 10-year Treasury yield, 3-month bill, ICE BofA US Corporate OAS, 10-year breakeven inflation"
+    url: https://fred.stlouisfed.org/
 ---
 import Frontier from '../../components/models/Frontier.astro';
+import { assetStats, rollingCorr, fred, shortDate } from '../../lib/data';
+
+export const st = assetStats(['SPY', 'EFA', 'IEF', 'LQD', 'GLD'], 5);
+export const roll = rollingCorr('SPY', 'IEF', 252, 21);
+export const rhoNow = roll[roll.length - 1][1];
+export const rho2022 = (() => { const xs = roll.filter(([d]) => d >= '2022-06-01' && d <= '2023-06-30').map(([, c]) => c); return Math.max(...xs); })();
+export const rhoPre = (() => { const xs = roll.filter(([d]) => d < '2021-01-01').map(([, c]) => c); return xs.reduce((a, b) => a + b, 0) / xs.length; })();
+export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
+export const y10 = fred.latest('DGS10');
 
 ## The setup
 
-Five asset classes with illustrative expected returns, volatilities, and a correlation matrix. Equities correlate strongly with each other; Treasuries and investment-grade credit correlate strongly with each other; gold is weakly related to everything. The one correlation that defines the regime is the stock-bond pair, and it is on a slider.
+Five asset classes, each proxied by a liquid ETF: US equity (SPY), international developed equity (EFA), 7–10 year Treasuries (IEF), investment-grade credit (LQD) and gold (GLD). Their volatilities and the full correlation matrix are estimated from {st.n.toLocaleString()} daily returns between {shortDate(st.start)} and {shortDate(st.end)}, and the site re-estimates them on every build. Equities correlate strongly with each other ({st.corr[0][1].toFixed(2)} between SPY and EFA); Treasuries and investment-grade credit correlate strongly with each other ({st.corr[2][3].toFixed(2)}); gold is weakly related to everything. The one correlation that defines the regime is the stock-bond pair, and it is on a slider that starts at its latest one-year reading of {rhoNow.toFixed(2)}.
+
+Expected returns are the input nobody observes, so the model states its method. The default is yield-based: the 10-year Treasury yield of {y10.toFixed(2)}% as the bond return, that yield plus a 4.5% premium for US equity, plus the investment-grade index spread for credit, and the 10-year breakeven inflation rate for gold. A toggle swaps in the trailing five-year compound returns instead, which for this window were {pct(st.annRet[0])} for US equity, {pct(st.annRet[2])} for Treasuries and {pct(st.annRet[4])} for gold. The two methods disagree by design; that disagreement is the point of the last section.
 
 The portfolio problem is the Level III one: for every target return, find the weights that minimize variance.
 
@@ -35,13 +50,13 @@ $$
 
 and the tangency portfolio with a risk-free rate $r_f$ is $w_T \propto \Sigma^{-1}(\mu - r_f\mathbf{1})$. The model draws that curve, the capital market line through the tangency point, and a cloud of random long-only portfolios so you can see where the constraint binds.
 
-<Frontier id="frontier" note="Illustrative capital market assumptions, annual. Edit returns, volatilities, and your weights. Weights are normalized to sum to one." />
+<Frontier id="frontier" />
 
 ## Reading it
 
-Start at the default correlation of −0.20, the post-2000 regime. The 60/40 point sits close to the frontier and Treasuries carry a large tangency weight. The risk-contribution column shows the equity sleeves contributing roughly 90% of portfolio variance even though they hold 60% of capital; bonds contribute almost nothing because their covariance with equities is negative and cancels part of their own variance.
+The rolling-correlation chart at the bottom of the panel is the history of the regime. Before 2021 the one-year SPY–IEF correlation averaged {rhoPre.toFixed(2)}: bonds rallied when stocks fell, and the 60/40 point sat close to the frontier with Treasuries carrying a large tangency weight. In the 2022 inflation shock it peaked at {rho2022.toFixed(2)}. Today it reads {rhoNow.toFixed(2)}.
 
-Now drag the correlation to +0.40, the regime of 2022 and of any inflation-driven sell-off. Three things happen. The frontier shifts right: every level of return now costs more risk. The tangency portfolio sheds Treasuries and leans into gold, because gold is now the asset least correlated with the rest. And the risk contribution of the equity sleeve goes to roughly 100%; bonds are no longer a hedge, they are a smaller, lower-return version of the same bet.
+Drag the slider to the pre-2021 value and the risk-contribution column shows the equity sleeves contributing roughly 90% of portfolio variance even though they hold 60% of capital; bonds contribute almost nothing because their covariance with equities is negative and cancels part of their own variance. Drag it past the 2022 peak toward +0.40, a fully inflation-driven regime, and three things happen. The frontier shifts right: every level of return now costs more risk. The tangency portfolio sheds Treasuries and leans into whatever is now least correlated with the rest, which in the estimated matrix is gold. And the risk contribution of the equity sleeve goes to roughly 100%; bonds are no longer a hedge, they are a smaller, lower-return version of the same bet.
 
 ## Risk budgeting
 
@@ -55,8 +70,8 @@ and the contributions sum to one. This is the lens Level III uses for risk parit
 
 ## The sensitivity you cannot avoid
 
-Mean-variance optimizers are notoriously driven by expected returns, which are the inputs nobody knows. Nudge the equity expected return by 50 basis points and watch the tangency weights swing. That instability is not a reason to abandon the framework. It is a reason to use it for the thing it is good at, which is showing how the *structure* of risk changes with correlation, and to treat the weights it spits out as a direction rather than a destination.
+Mean-variance optimizers are notoriously driven by expected returns, which are the inputs nobody knows. Flip the method toggle and watch the tangency weights swing; the five-year trailing returns reflect a window in which Treasuries lost money and gold compounded at {pct(st.annRet[4])}, and an optimizer fed those numbers will tell you to own very little duration. Nudge the equity expected return by 50 basis points and the weights move again. That instability is not a reason to abandon the framework. It is a reason to use it for the thing it is good at, which is showing how the *structure* of risk changes with correlation, and to treat the weights it spits out as a direction rather than a destination.
 
 ## What this means for investors
 
-Decide which regime you believe you are in. If inflation risk dominates, bonds are duration exposure rather than a hedge, and the diversifiers that matter are the ones uncorrelated with both growth and inflation shocks. If growth risk dominates, the old regime returns and Treasuries resume their role. The slider is the belief; the frontier is its consequence.
+Decide which regime you believe you are in. If inflation risk dominates, bonds are duration exposure rather than a hedge, and the diversifiers that matter are the ones uncorrelated with both growth and inflation shocks. If growth risk dominates, the old regime returns and Treasuries resume their role. The rolling chart tells you where the market has been; the slider is your belief about where it goes; the frontier is its consequence.

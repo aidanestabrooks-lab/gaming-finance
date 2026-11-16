@@ -21,7 +21,7 @@ import PayoffMatrix from '../../components/models/PayoffMatrix.astro';
 
 Two governments. The first threatens tariffs unless the second changes a policy. The second can concede or hold firm. The first can then impose the tariff or back down. Collapse the sequence into a simultaneous game of beliefs, and you get a 2×2 matrix: the threatener chooses between **Impose** and **Bluff**; the partner chooses between **Concede** and **Resist**.
 
-Payoffs are in arbitrary units of political and economic welfare. The defaults below encode four stylized facts: conceding to a bluff is humiliating, imposing a tariff on a conceding partner is wasteful, resisting a real tariff hurts both sides, and getting a concession for free is the best outcome of all.
+Payoffs are ordinal welfare rankings, not data: no series measures how a government values a concession. What the matrix needs is the order of the outcomes, and the defaults below encode four stylized facts: conceding to a bluff is humiliating, imposing a tariff on a conceding partner is wasteful, resisting a real tariff hurts both sides, and getting a concession for free is the best outcome of all.
 
 <PayoffMatrix
   id="tariff"

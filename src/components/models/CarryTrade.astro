@@ -4,37 +4,84 @@
  * currency management and risk management). Covered interest parity prices
  * the hedged return at zero; the unhedged trade earns the rate differential
  * while bearing a Student-t spot distribution with occasional crowded-unwind
- * jumps. Monte Carlo produces the P&L distribution, VaR, CVaR and the
- * probability of a margin call.
+ * jumps. Defaults are the live yen carry: USD/JPY spot and history (FRED
+ * DEXJPUS), the Bank of Japan's policy rate and SOFR, one-year realized vol,
+ * and a jump process calibrated to the frequency and size of 3-sigma yen
+ * appreciation days in the full sample. Monte Carlo produces the P&L
+ * distribution, VaR, CVaR and the probability of a margin call.
  */
+import { fred, realizedVol, logReturns, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
 interface Props {
   id: string;
   title?: string;
   note?: string;
 }
-const { id, title = 'Carry trade P&L: fat tails, jumps, VaR', note } = Astro.props;
+const { id, title = 'Yen carry P&L: fat tails, jumps, VaR', note } = Astro.props;
+
+const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+const jpy = fred.get('DEXJPUS');
+const spot = jpy.value;
+const dates = jpy.obs.map((o) => o[0]);
+const close = jpy.obs.map((o) => o[1]);
+const rFund = fred.latest('IRSTCI01JPM156N') / 100; // BoJ: immediate (overnight) rate, monthly
+const rTarget = fred.latest('SOFR') / 100;
+const vol1y = realizedVol(close, 252);
+const vol10y = realizedVol(close, 2520);
+
+// Jump calibration: daily log changes in USD/JPY; a day where the yen appreciates (USD/JPY falls)
+// by more than three trailing one-year standard deviations counts as an unwind jump.
+const r = logReturns(close);
+const jumps: { date: string; size: number }[] = [];
+const W = 252;
+for (let i = W; i < r.length; i++) {
+  let m = 0;
+  for (let k = i - W; k < i; k++) m += r[k];
+  m /= W;
+  let v = 0;
+  for (let k = i - W; k < i; k++) v += (r[k] - m) ** 2;
+  const sd = Math.sqrt(v / (W - 1));
+  if (r[i] < -3 * sd) jumps.push({ date: dates[i + 1], size: r4(-r[i]) });
+}
+const yearsObserved = (r.length - W) / 252;
+const jumpRate = jumps.length / yearsObserved; // events per year
+const jumpProb = 1 - Math.exp(-jumpRate); // P(at least one in a year)
+const jumpSize = jumps.length ? jumps.reduce((a, j) => a + j.size, 0) / jumps.length : 0.03;
+
+// Weekly-sampled history for the chart (about 870 points since 2010).
+const hist: [string, number][] = jpy.obs.filter((_, i) => i % 5 === 0 || i === jpy.obs.length - 1);
+const cfg = { hist, jumps, spot, spotAsOf: jpy.asOf };
+const fmtPct = (x: number, d = 1) => `${(100 * x).toFixed(d)}%`;
+const defaultNote = `Long USD/JPY funded in yen. Spot ¥${spot.toFixed(2)} (${shortDate(jpy.asOf)}); BoJ rate ${fmtPct(rFund, 2)}, SOFR ${fmtPct(rTarget, 2)}. Student-t daily innovations plus a jump process calibrated below. A margin call closes the position at the loss threshold.`;
 ---
 
 <div class="model" data-model="carry" id={id}>
+  <script is:inline type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
   <div class="model-head">
     <p class="model-title">{title}</p>
-    {note && <p class="model-note">{note}</p>}
+    <p class="model-note">{note ?? defaultNote}</p>
   </div>
   <div class="controls">
-    <label class="ctl"><span class="lab"><span>Funding rate (e.g. JPY)</span><output data-o="rf">0.75%</output></span><input type="range" min="-0.01" max="0.06" step="0.0025" value="0.0075" data-in="rf" /></label>
-    <label class="ctl"><span class="lab"><span>Target rate (e.g. USD)</span><output data-o="rt">4.25%</output></span><input type="range" min="0" max="0.15" step="0.0025" value="0.0425" data-in="rt" /></label>
-    <label class="ctl"><span class="lab"><span>Spot vol (annual)</span><output data-o="vol">10%</output></span><input type="range" min="0.03" max="0.3" step="0.005" value="0.10" data-in="vol" /></label>
+    <label class="ctl"><span class="lab"><span>Funding rate (JPY, BoJ overnight)</span><output data-o="rf">{fmtPct(rFund, 2)}</output></span><input type="range" min="-0.01" max="0.06" step="0.0005" value={r4(rFund)} data-in="rf" /></label>
+    <label class="ctl"><span class="lab"><span>Target rate (USD, SOFR)</span><output data-o="rt">{fmtPct(rTarget, 2)}</output></span><input type="range" min="0" max="0.15" step="0.0005" value={r4(rTarget)} data-in="rt" /></label>
+    <label class="ctl"><span class="lab"><span>Spot vol (annual; 1y realized)</span><output data-o="vol">{fmtPct(vol1y, 1)}</output></span><input type="range" min="0.03" max="0.3" step="0.001" value={r4(vol1y)} data-in="vol" /></label>
     <label class="ctl"><span class="lab"><span>Tail fatness (t degrees of freedom)</span><output data-o="nu">4</output></span><input type="range" min="2.5" max="30" step="0.5" value="4" data-in="nu" /></label>
-    <label class="ctl"><span class="lab"><span>Unwind jump: annual probability</span><output data-o="jp">25%</output></span><input type="range" min="0" max="1" step="0.05" value="0.25" data-in="jp" /></label>
-    <label class="ctl"><span class="lab"><span>Unwind jump: size (adverse)</span><output data-o="js">8%</output></span><input type="range" min="0" max="0.25" step="0.01" value="0.08" data-in="js" /></label>
+    <label class="ctl"><span class="lab"><span>Unwind jump: annual probability</span><output data-o="jp">{fmtPct(jumpProb, 0)}</output></span><input type="range" min="0" max="1" step="0.01" value={r4(jumpProb)} data-in="jp" /></label>
+    <label class="ctl"><span class="lab"><span>Unwind jump: mean size (adverse)</span><output data-o="js">{fmtPct(jumpSize, 1)}</output></span><input type="range" min="0" max="0.25" step="0.001" value={r4(jumpSize)} data-in="js" /></label>
     <label class="ctl"><span class="lab"><span>Leverage</span><output data-o="lev">5×</output></span><input type="range" min="1" max="20" step="1" value="5" data-in="lev" /></label>
     <label class="ctl"><span class="lab"><span>Horizon (days)</span><output data-o="h">90</output></span><input type="range" min="5" max="365" step="5" value="90" data-in="h" /></label>
     <label class="ctl"><span class="lab"><span>Margin call at equity loss of</span><output data-o="mc">50%</output></span><input type="range" min="0.1" max="1" step="0.05" value="0.5" data-in="mc" /></label>
     <label class="ctl"><span class="lab"><span>Paths</span><output data-o="n">5000</output></span><input type="range" min="1000" max="20000" step="1000" value="5000" data-in="n" /></label>
   </div>
+  <p class="readout">
+    <strong>Calibration from USD/JPY history ({shortDate(dates[0])} to {shortDate(jpy.asOf)}):</strong> realized vol {fmtPct(vol1y, 1)} over the last year, {fmtPct(vol10y, 1)} over ten years.
+    {jumps.length} days in {yearsObserved.toFixed(1)} years saw the yen appreciate by more than three trailing-year standard deviations, a rate of {jumpRate.toFixed(2)} per year
+    (probability of at least one in a year {fmtPct(jumpProb, 0)}), with a mean one-day move of {fmtPct(jumpSize, 2)}. Those seed the jump sliders.
+  </p>
   <div class="stats">
     <div class="stat"><div class="k">Carry earned over horizon (unlevered)</div><div class="v" data-out="carry">–</div></div>
-    <div class="stat"><div class="k">CIP forward implies spot move of</div><div class="v" data-out="fwd">–</div><div class="k">hedged carry = 0</div></div>
+    <div class="stat"><div class="k">CIP forward implies spot move of</div><div class="v" data-out="fwd">–</div><div class="k" data-out="fwdlvl">hedged carry = 0</div></div>
     <div class="stat"><div class="k">Expected levered return on equity</div><div class="v" data-out="er">–</div></div>
     <div class="stat"><div class="k">95% VaR / 99% VaR (on equity)</div><div class="v" data-out="var">–</div></div>
     <div class="stat"><div class="k">99% CVaR (expected shortfall)</div><div class="v" data-out="cvar">–</div></div>
@@ -44,34 +91,92 @@ const { id, title = 'Carry trade P&L: fat tails, jumps, VaR', note } = Astro.pro
   </div>
   <svg class="hist" viewBox="0 0 720 240" role="img" aria-label="Distribution of levered returns"></svg>
   <div class="legend"><span><i style="background: var(--c1)"></i>Return on equity over the horizon</span><span><i style="background: var(--neg)"></i>99% VaR</span><span><i style="background: var(--c2)"></i>Mean</span></div>
+  <p class="readout">USD/JPY since {dates[0].slice(0, 4)}, weekly. Dots mark the {jumps.length} three-sigma yen-appreciation days used in the calibration; the shaded band is the July–August 2024 unwind.</p>
+  <svg class="fx" viewBox="0 0 720 190" role="img" aria-label="USD/JPY history with unwind days marked"></svg>
+  <DataNote
+    sources={[
+      { name: 'FRED DEXJPUS: Japanese yen to US dollar spot (Federal Reserve H.10)', asOf: jpy.asOf, url: 'https://fred.stlouisfed.org/series/DEXJPUS' },
+      { name: 'FRED IRSTCI01JPM156N: Japan immediate interest rate (OECD)', asOf: fred.asOf('IRSTCI01JPM156N'), url: 'https://fred.stlouisfed.org/series/IRSTCI01JPM156N' },
+      { name: 'FRED SOFR', asOf: fred.asOf('SOFR'), url: 'https://fred.stlouisfed.org/series/SOFR' },
+    ]}
+    note="Derived: realized volatility from daily log changes; jump frequency and size from days with yen appreciation beyond three trailing-year standard deviations. The degrees of freedom, leverage, horizon and margin threshold are choices, not data."
+  />
 </div>
 
 <script>
   import { rng, randt, fmt, quantile, mean, stdev } from '../../lib/stats';
-  import { el, clear } from '../../lib/svg';
+  import { el, clear, scale, path, ticks } from '../../lib/svg';
+
+  interface Cfg { hist: [string, number][]; jumps: { date: string; size: number }[]; spot: number; spotAsOf: string }
+
+  function drawFx(svg: SVGSVGElement, cfg: Cfg) {
+    clear(svg);
+    const box = { left: 50, right: 700, top: 12, bottom: 155 };
+    const t = (d: string) => new Date(d).getTime();
+    const t0 = t(cfg.hist[0][0]), t1 = t(cfg.hist[cfg.hist.length - 1][0]);
+    const vals = cfg.hist.map((h) => h[1]);
+    const lo = Math.floor(Math.min(...vals) / 10) * 10, hi = Math.ceil(Math.max(...vals) / 10) * 10;
+    const sx = scale(t0, t1, box.left, box.right), sy = scale(lo, hi, box.bottom, box.top);
+    const g = el('g');
+    for (const v of ticks(lo, hi, 5)) {
+      g.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(v), y2: sy(v), class: 'grid' }));
+      g.appendChild(el('text', { x: box.left - 6, y: sy(v) + 4, class: 'tick', 'text-anchor': 'end' }, `¥${v}`));
+    }
+    const y0 = new Date(t0).getUTCFullYear(), y1 = new Date(t1).getUTCFullYear();
+    for (let y = y0; y <= y1; y += 2) {
+      const x = sx(Date.UTC(y, 0, 1));
+      if (x < box.left) continue;
+      g.appendChild(el('text', { x, y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, String(y)));
+    }
+    g.appendChild(el('line', { x1: box.left, x2: box.right, y1: box.bottom, y2: box.bottom, class: 'axis' }));
+    svg.appendChild(g);
+    // 2024 unwind band.
+    const a = sx(Date.UTC(2024, 6, 1)), b = sx(Date.UTC(2024, 7, 31));
+    svg.appendChild(el('rect', { x: a, y: box.top, width: b - a, height: box.bottom - box.top, fill: 'var(--gold-soft)' }));
+    svg.appendChild(el('text', { x: a - 4, y: box.top + 12, class: 'lbl muted', 'text-anchor': 'end' }, 'Aug 2024 unwind'));
+    const pts: [number, number][] = cfg.hist.map(([d, v]) => [sx(t(d)), sy(v)]);
+    svg.appendChild(el('path', { d: path(pts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 1.6 }));
+    const lookup = (d: string) => {
+      const x = t(d);
+      let best = cfg.hist[0];
+      for (const h of cfg.hist) if (Math.abs(t(h[0]) - x) < Math.abs(t(best[0]) - x)) best = h;
+      return best[1];
+    };
+    for (const j of cfg.jumps) {
+      svg.appendChild(el('circle', { cx: sx(t(j.date)), cy: sy(lookup(j.date)), r: 3 + 60 * j.size, fill: 'var(--neg)', opacity: 0.75 }));
+    }
+    const last = pts[pts.length - 1];
+    svg.appendChild(el('circle', { cx: last[0], cy: last[1], r: 4, fill: 'var(--c2)', stroke: 'var(--bg-elev)', 'stroke-width': 1.5 }));
+    svg.appendChild(el('text', { x: last[0] - 8, y: last[1] - 8, class: 'lbl', 'text-anchor': 'end' }, `¥${cfg.spot.toFixed(2)}`));
+    svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 184, class: 'lbl muted', 'text-anchor': 'middle' }, 'USD/JPY spot (weekly samples); dot size scales with the day’s move'));
+  }
 
   function init(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.querySelector('script[data-cfg]')!.textContent!);
     const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
     const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
     const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
     const svg = root.querySelector<SVGSVGElement>('svg.hist')!;
+    drawFx(root.querySelector<SVGSVGElement>('svg.fx')!, cfg);
 
     const update = () => {
       const rf = +q('rf').value, rt = +q('rt').value, vol = +q('vol').value, nu = +q('nu').value, jp = +q('jp').value, js = +q('js').value;
       const lev = +q('lev').value, H = +q('h').value, mc = +q('mc').value, N = +q('n').value;
       o('rf').textContent = fmt.pct(rf, 2); o('rt').textContent = fmt.pct(rt, 2); o('vol').textContent = fmt.pct(vol, 1); o('nu').textContent = nu.toFixed(1);
-      o('jp').textContent = fmt.pct(jp, 0); o('js').textContent = fmt.pct(js, 0); o('lev').textContent = `${lev}×`; o('h').textContent = String(H); o('mc').textContent = fmt.pct(mc, 0); o('n').textContent = String(N);
+      o('jp').textContent = fmt.pct(jp, 0); o('js').textContent = fmt.pct(js, 1); o('lev').textContent = `${lev}×`; o('h').textContent = String(H); o('mc').textContent = fmt.pct(mc, 0); o('n').textContent = String(N);
 
       const T = H / 365;
       const carry = (rt - rf) * T;
       out('carry').textContent = `+${fmt.pct(carry, 2)}`;
-      // CIP: F/S = (1 + r_target T) / (1 + r_fund T). Holding target currency, forward implies the target depreciates by carry.
+      // CIP: F/S = (1 + r_fund T) / (1 + r_target T) for USD/JPY quoted as yen per dollar... the forward dollar is
+      // worth fewer yen by the rate differential, so the implied move in the target currency is negative.
       const fwd = (1 + rf * T) / (1 + rt * T) - 1;
-      out('fwd').textContent = `${fmt.pct(fwd, 2)} (target vs funding)`;
+      out('fwd').textContent = `${fmt.pct(fwd, 2)} (USD vs JPY)`;
+      out('fwdlvl').textContent = `forward ¥${(cfg.spot * (1 + fwd)).toFixed(2)} vs spot ¥${cfg.spot.toFixed(2)}; hedged carry = 0`;
 
       const u = rng(2024);
       const dayVol = vol / Math.sqrt(252);
-      const tScale = nu > 2 ? Math.sqrt((nu - 2) / nu) : 1; // unit-variance t
+      const tScale = nu > 2 ? Math.sqrt((nu - 2) / nu) : 1;
       const days = Math.round(H * (252 / 365));
       const pDay = 1 - Math.pow(1 - jp, 1 / 252);
       const rets: number[] = [];

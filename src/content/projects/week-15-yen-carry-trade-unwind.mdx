@@ -3,7 +3,7 @@ title: "The Yen Carry Trade: Pricing the Unwind"
 date: 2026-11-06
 week: 15
 tags: [CFA, Geopolitics, Markets]
-summary: "Borrow in a low-rate currency, invest in a high-rate one, and collect the difference until the day everyone exits at once. Covered interest parity says the hedged version of the trade earns nothing, so the carry is payment for bearing a distribution with a very bad left tail. The simulator builds that distribution with fat tails and crowding jumps and reports VaR, expected shortfall, and the probability of a margin call."
+summary: "Borrow in a low-rate currency, invest in a high-rate one, and collect the difference until the day everyone exits at once. Covered interest parity says the hedged version of the trade earns nothing, so the carry is payment for bearing a distribution with a very bad left tail. The simulator builds that distribution from the live USD/JPY spot, the actual BoJ and SOFR rates, realized volatility, and a jump process calibrated to the yen's own three-sigma days, and reports VaR, expected shortfall, and the probability of a margin call."
 takeaways:
   - "Under covered interest parity the forward discount equals the rate differential, so hedged carry is zero. Unhedged carry is a bet that the spot rate will not move as much as the forward implies."
   - "Carry returns are negatively skewed with fat tails: many small gains and occasional large losses. A normal-distribution VaR understates the risk by a wide margin."
@@ -16,14 +16,31 @@ sources:
     url: https://www.bis.org/publ/qtrpdf/r_qt2409.htm
   - title: "Bank of Japan: Monetary policy releases"
     url: https://www.boj.or.jp/en/mopo/index.htm
+  - title: "FRED: USD/JPY spot (DEXJPUS), Japan immediate rate (IRSTCI01JPM156N), SOFR"
+    url: https://fred.stlouisfed.org/series/DEXJPUS
 ---
 import CarryTrade from '../../components/models/CarryTrade.astro';
+import { fred, realizedVol, shortDate } from '../../lib/data';
+
+export const jpy = fred.get('DEXJPUS');
+export const spot = jpy.value;
+export const boj = fred.latest('IRSTCI01JPM156N');
+export const sofr = fred.latest('SOFR');
+export const diff = sofr - boj;
+export const vol1y = realizedVol(jpy.obs.map((o) => o[1]), 252);
+export const aug2024 = (() => {
+  const seg = jpy.obs.filter(([d]) => d >= '2024-07-01' && d <= '2024-08-10');
+  const hi = Math.max(...seg.map((o) => o[1]));
+  const lo = Math.min(...seg.map((o) => o[1]));
+  return { hi, lo, move: hi / lo - 1 };
+})();
+export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
 
 ## The setup
 
-The yen carry trade funds at Japan's policy rate and invests in dollars, Mexican pesos, or anything else that pays more. In August 2024, a Bank of Japan hike and a weak US jobs print triggered an unwind that took the Nikkei down 12% in a day and sent the yen up 10% in a few weeks, inflicting losses on positions that had looked like free money for two years. As the BoJ continues to normalize, the question for anyone with a levered carry position is what that distribution looks like now.
+The yen carry trade funds at Japan's policy rate and invests in dollars, Mexican pesos, or anything else that pays more. In July and August 2024, a Bank of Japan hike and a weak US jobs print triggered an unwind that took the Nikkei down 12% in a day and sent USD/JPY from ¥{aug2024.hi.toFixed(1)} to ¥{aug2024.lo.toFixed(1)} in a few weeks, a {pct(aug2024.move)} appreciation of the yen against positions that had looked like free money for two years. The BoJ's overnight rate now stands at {boj.toFixed(2)}% against SOFR at {sofr.toFixed(2)}%, a differential of {diff.toFixed(2)} percentage points, with spot at ¥{spot.toFixed(2)} as of {shortDate(jpy.asOf)}. The question for anyone with a levered carry position is what the distribution of that position looks like now.
 
-<CarryTrade id="carry" note="Student-t daily innovations with an adverse jump process. Margin call closes the position at the loss threshold. Illustrative, not calibrated to any live market." />
+<CarryTrade id="carry" />
 
 ## Covered interest parity
 
@@ -33,13 +50,13 @@ $$
 \frac{F}{S} = \frac{1 + r_{\text{target}}\,T}{1 + r_{\text{fund}}\,T}
 $$
 
-Hold the high-yield currency and hedge it forward, and the forward discount hands back exactly the carry you earned. Hedged carry is zero (ignoring basis). The *unhedged* trade is therefore a pure bet that the spot rate will depreciate by less than the forward implies. The "CIP forward implies" box shows that break-even move for your inputs. Everything above it is profit; everything below it is loss.
+Hold the high-yield currency and hedge it forward, and the forward discount hands back exactly the carry you earned. Hedged carry is zero (ignoring basis). The *unhedged* trade is therefore a pure bet that the spot rate will depreciate by less than the forward implies. The "CIP forward implies" box shows that break-even move for the live rates, with the forward level in yen next to spot. Everything above it is profit; everything below it is loss.
 
 ## Why the distribution is not normal
 
-Three features are built into the simulation. Daily spot changes are drawn from a Student-t distribution scaled to the chosen volatility; with four degrees of freedom, a four-sigma day is roughly ten times more likely than under a normal. On top of that, an adverse jump arrives with a chosen annual probability and a chosen size, representing a crowded unwind rather than ordinary noise. And a margin call closes the position when the levered loss reaches the threshold, which turns a path's temporary drawdown into a permanent one.
+Three features are built into the simulation. Daily spot changes are drawn from a Student-t distribution scaled to realized volatility, currently {pct(vol1y)} a year on one year of data; with four degrees of freedom, a four-sigma day is roughly ten times more likely than under a normal. On top of that, an adverse jump arrives with an annual probability and a mean size that are read off the yen's own history: the calibration line in the panel counts every day since 2010 on which the yen appreciated by more than three trailing-year standard deviations and uses the frequency and the average size of those days as the jump parameters. The chart underneath the histogram marks each of them, and the cluster in the shaded 2024 band is what an unwind looks like in daily data. Finally, a margin call closes the position when the levered loss reaches the threshold, which turns a path's temporary drawdown into a permanent one.
 
-Run it with the defaults. The mean return on equity is positive; carry is real income. The 99% VaR is a multiple of the mean. The expected shortfall beyond VaR is worse still. Skewness is negative, excess kurtosis is large, and a meaningful fraction of paths end in a margin call. Now set leverage to 10× and the margin-call probability roughly doubles while the mean barely improves: that is the shape of the trade's risk-return trade-off.
+Run it with the defaults. The mean return on equity is positive; carry is real income at a {diff.toFixed(2)}-point differential. The 99% VaR is a multiple of the mean. The expected shortfall beyond VaR is worse still. Skewness is negative, excess kurtosis is large, and a meaningful fraction of paths end in a margin call. Now set leverage to 10× and the margin-call probability roughly doubles while the mean barely improves: that is the shape of the trade's risk-return trade-off.
 
 ## VaR, CVaR, and what they miss
 
@@ -47,7 +64,7 @@ Level III defines value at risk as the loss not exceeded with a given confidence
 
 ## The game underneath
 
-Carry trades are crowded for a game-theoretic reason. Each trader's position is profitable as long as nobody exits. Each trader's stop-loss is set at a similar level because everyone uses similar risk models. When the price reaches the first cluster of stops, the forced selling moves the price to the next cluster. The unwind is a coordination failure in reverse: everyone's rational individual exit produces the collective crash that none of them could survive. The jump parameter in the simulator is a crude stand-in for that mechanism; the real jump size is a function of how crowded the trade is, which is the one thing the position's own P&L never tells you.
+Carry trades are crowded for a game-theoretic reason. Each trader's position is profitable as long as nobody exits. Each trader's stop-loss is set at a similar level because everyone uses similar risk models. When the price reaches the first cluster of stops, the forced selling moves the price to the next cluster. The unwind is a coordination failure in reverse: everyone's rational individual exit produces the collective crash that none of them could survive. The jump parameter in the simulator is a historical average of such days; the next jump's size is a function of how crowded the trade is now, which is the one thing the position's own P&L never tells you.
 
 ## What this means for investors
 

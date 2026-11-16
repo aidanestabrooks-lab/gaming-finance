@@ -14,16 +14,30 @@ sources:
     url: https://www.boeing.com/commercial/#/orders-deliveries
   - title: "Airbus: Orders and Deliveries"
     url: https://www.airbus.com/en/products-services/commercial-aircraft/market/orders-and-deliveries
+  - title: "Airbus: Full-Year 2025 results (19 February 2026)"
+    url: https://www.airbus.com/en/newsroom/press-releases/2026-02-airbus-reports-full-year-fy-2025-results
+  - title: "Airbus: Full-Year 2022 results (deliveries 2021 and 2022)"
+    url: https://www.airbus.com/en/newsroom/press-releases/2023-02-airbus-reports-full-year-fy-2022-results
+  - title: "Airbus: Full-Year 2020 results (deliveries 2019 and 2020)"
+    url: https://www.airbus.com/en/newsroom/press-releases/2021-02-airbus-reports-full-year-fy-2020-results
+  - title: "Boeing: Fourth Quarter 2025 Results (January 27, 2026)"
+    url: https://boeing.mediaroom.com/2026-01-27-Boeing-Reports-Fourth-Quarter-Results
+  - title: "Boeing: Fourth Quarter 2023 Results (deliveries 2022 and 2023)"
+    url: https://boeing.mediaroom.com/2024-01-31-Boeing-Reports-Fourth-Quarter-Results
+  - title: "Boeing: Fourth Quarter 2021 Results (deliveries 2020 and 2021)"
+    url: https://boeing.mediaroom.com/2022-01-26-Boeing-Reports-Fourth-Quarter-Results
+  - title: "Boeing: Fourth Quarter 2019 Results (deliveries 2019)"
+    url: https://boeing.mediaroom.com/2020-01-29-Boeing-Reports-Fourth-Quarter-Results
 charts:
-  - title: "Commercial aircraft deliveries per year"
+  - title: "Commercial aircraft deliveries per year, 2019 to 2025"
     type: line
     labels: ["2019", "2020", "2021", "2022", "2023", "2024", "2025"]
     series:
       - name: "Airbus"
-        data: [863, 566, 611, 661, 735, 766, 790]
+        data: [863, 566, 611, 661, 735, 766, 793]
       - name: "Boeing"
-        data: [380, 157, 340, 480, 528, 348, 540]
-    note: "Illustrative figures for layout testing. Replace with company-reported deliveries."
+        data: [380, 157, 340, 480, 528, 348, 600]
+    note: "Source: company-reported full-year commercial aircraft deliveries. Airbus figures from Airbus full-year results press releases (FY2020, FY2022, FY2024 and FY2025 releases, 2021 to 2026). Boeing figures from the Commercial Airplanes deliveries line in Boeing fourth-quarter results releases (January 2020, 2022, 2024 and 2026)."
 ---
 
 ## The setup

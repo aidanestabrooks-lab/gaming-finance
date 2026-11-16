@@ -1,51 +1,104 @@
 ---
 /**
- * Mean-variance optimization (CFA Level III asset allocation). Five assets with
- * editable expected returns and volatilities, a fixed correlation structure
- * with the stock-bond correlation exposed as a regime slider. Draws the
+ * Mean-variance optimization (CFA Level III asset allocation). Five ETF-proxied
+ * asset classes whose volatilities and full correlation matrix are estimated
+ * from five years of daily returns at build time (src/lib/data.ts). Expected
+ * returns come from one of two stated methods (yield-based or trailing CAGR)
+ * and stay editable. The stock-bond correlation is exposed as a regime slider
+ * that defaults to the latest rolling one-year SPY-IEF correlation. Draws the
  * unconstrained efficient frontier (closed form), the capital market line, the
- * tangency portfolio, a long-only random-portfolio cloud, and your portfolio
- * with its risk contributions.
+ * tangency portfolio, a long-only random-portfolio cloud, your portfolio with
+ * its risk contributions, and the rolling stock-bond correlation since 2017.
  */
+import { assetStats, rollingCorr, fred, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
 interface Props {
   id: string;
   title?: string;
   note?: string;
 }
 const { id, title = 'Efficient frontier under a correlation regime', note } = Astro.props;
-const assets = [
-  { name: 'US equity', er: 0.07, vol: 0.16, w: 0.4 },
-  { name: 'Intl equity', er: 0.075, vol: 0.18, w: 0.2 },
-  { name: 'US Treasuries', er: 0.042, vol: 0.06, w: 0.3 },
-  { name: 'IG credit', er: 0.05, vol: 0.07, w: 0.1 },
-  { name: 'Gold', er: 0.04, vol: 0.15, w: 0.0 },
-];
+
+const TICKERS = ['SPY', 'EFA', 'IEF', 'LQD', 'GLD'];
+const st = assetStats(TICKERS, 5);
+const roll = rollingCorr('SPY', 'IEF', 252, 21);
+const rhoNow = roll[roll.length - 1][1];
+const rollAsOf = roll[roll.length - 1][0];
+
+const r4 = (x: number) => Math.round(x * 1e4) / 1e4;
+const rf10 = fred.latest('DGS10') / 100;
+const oas = fred.latest('BAMLC0A0CM') / 100;
+const bei = fred.latest('T10YIE') / 100;
+const rfShort = fred.latest('DGS3MO') / 100;
+const ERP_US = 0.045, ERP_INTL = 0.05;
+const erYield = [rf10 + ERP_US, rf10 + ERP_INTL, rf10, rf10 + oas, bei].map(r4);
+const erHist = st.annRet.map(r4);
+const weights = [0.4, 0.2, 0.3, 0.1, 0];
+
+const assets = st.labels.map((name, i) => ({ name, ticker: TICKERS[i], er: erYield[i], erHist: erHist[i], vol: r4(st.annVol[i]), w: weights[i] }));
+const cfg = {
+  corr: st.corr.map((row) => row.map((c) => Math.round(c * 1000) / 1000)),
+  vol: assets.map((a) => a.vol),
+  erYield,
+  erHist,
+  rhoNow,
+  roll,
+  start: st.start,
+  end: st.end,
+};
+const fmtPct = (x: number, d = 1) => `${(100 * x).toFixed(d)}%`;
+const defaultNote = `Volatilities and correlations estimated from ${shortDate(st.start)} to ${shortDate(st.end)} daily returns of SPY, EFA, IEF, LQD and GLD. Expected returns from the selected method; all inputs editable. Weights are normalized to sum to one.`;
 ---
 
 <div class="model" data-model="frontier" id={id}>
+  <script is:inline type="application/json" data-cfg set:html={JSON.stringify(cfg)} />
   <div class="model-head">
     <p class="model-title">{title}</p>
-    {note && <p class="model-note">{note}</p>}
+    <p class="model-note">{note ?? defaultNote}</p>
   </div>
   <div class="controls">
-    <label class="ctl"><span class="lab"><span>Stock–bond correlation (regime)</span><output data-o="rho">−0.20</output></span><input type="range" min="-0.5" max="0.7" step="0.05" value="-0.2" data-in="rho" /></label>
-    <label class="ctl"><span class="lab"><span>Risk-free rate</span><output data-o="rf">4.0%</output></span><input type="range" min="0" max="0.08" step="0.0025" value="0.04" data-in="rf" /></label>
+    <label class="ctl"><span class="lab"><span>Stock–bond correlation (regime)</span><output data-o="rho">{rhoNow.toFixed(2)}</output></span><input type="range" min="-0.6" max="0.5" step="0.01" value={rhoNow} data-in="rho" /></label>
+    <label class="ctl"><span class="lab"><span>Risk-free rate (3-month T-bill)</span><output data-o="rf">{fmtPct(rfShort, 2)}</output></span><input type="range" min="0" max="0.08" step="0.0005" value={r4(rfShort)} data-in="rf" /></label>
+    <label class="ctl">
+      <span class="lab"><span>Expected-return method</span></span>
+      <select data-in="erset">
+        <option value="yield" selected>Yield-based: 10y Treasury {fmtPct(rf10, 2)} + premia</option>
+        <option value="hist">Trailing 5-year CAGR ({st.start.slice(0, 4)}–{st.end.slice(0, 4)})</option>
+      </select>
+    </label>
     <label class="ctl"><span class="lab"><span>Random long-only portfolios</span><output data-o="n">2000</output></span><input type="range" min="500" max="8000" step="500" value="2000" data-in="n" /></label>
   </div>
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Asset</th><th>E[r]</th><th>Vol</th><th>Your weight</th><th>Risk contribution</th><th>Tangency weight</th></tr></thead>
+      <thead><tr><th>Asset (proxy)</th><th>E[r]</th><th>Vol (5y realized)</th><th>Your weight</th><th>Risk contribution</th><th>Tangency weight</th></tr></thead>
       <tbody>
         {
           assets.map((a, i) => (
             <tr>
-              <td>{a.name}</td>
+              <td>{a.name} <span class="mono muted">({a.ticker})</span></td>
               <td><input type="number" step="0.001" value={a.er} data-er={i} aria-label={`Expected return ${a.name}`} /></td>
               <td><input type="number" step="0.005" value={a.vol} data-vol={i} aria-label={`Volatility ${a.name}`} /></td>
               <td><input type="number" step="0.05" value={a.w} data-w={i} aria-label={`Weight ${a.name}`} /></td>
               <td data-rc={i}>–</td>
               <td data-tw={i}>–</td>
             </tr>
+          ))
+        }
+      </tbody>
+    </table>
+  </div>
+  <p class="readout">
+    <strong>Yield-based E[r]:</strong> US equity = 10y Treasury + {fmtPct(ERP_US, 1)} ERP; Intl equity = 10y + {fmtPct(ERP_INTL, 1)}; Treasuries = 10y yield {fmtPct(rf10, 2)}; IG credit = 10y + index OAS {fmtPct(oas, 2)}; Gold = 10y breakeven inflation {fmtPct(bei, 2)}.
+    <strong>Trailing CAGR:</strong> {assets.map((a) => `${a.name} ${fmtPct(a.erHist, 1)}`).join(', ')}.
+  </p>
+  <div class="table-scroll">
+    <table class="corr">
+      <thead><tr><th>ρ (5y daily)</th>{assets.map((a) => <th>{a.ticker}</th>)}</tr></thead>
+      <tbody>
+        {
+          assets.map((a, i) => (
+            <tr><th>{a.ticker}</th>{assets.map((_, j) => <td data-c={`${i}-${j}`}>{cfg.corr[i][j].toFixed(2)}</td>)}</tr>
           ))
         }
       </tbody>
@@ -66,35 +119,93 @@ const assets = [
     <span><i style="background: var(--c2); border-radius: 50%"></i>Tangency</span>
     <span><i style="background: var(--c3); border-radius: 50%"></i>Assets</span>
   </div>
+  <p class="readout">Rolling one-year correlation of daily SPY and IEF returns. The slider defaults to the latest value, <strong>{rhoNow.toFixed(2)}</strong> as of {shortDate(rollAsOf)}; the dashed marker is the slider's current setting.</p>
+  <svg class="roll" viewBox="0 0 720 170" role="img" aria-label="Rolling one-year stock-bond correlation since 2017"></svg>
+  <DataNote
+    sources={[
+      { name: 'Yahoo Finance adjusted daily closes: SPY, EFA, IEF, LQD, GLD', asOf: st.end, url: 'https://finance.yahoo.com/' },
+      { name: 'FRED: DGS10, DGS3MO, BAMLC0A0CM (ICE BofA US Corporate OAS), T10YIE', asOf: fred.asOf('DGS10'), url: 'https://fred.stlouisfed.org/' },
+    ]}
+    note={`Derived: annualized volatilities, the 5×5 correlation matrix and trailing CAGRs from ${st.n.toLocaleString()} daily log returns (${shortDate(st.start)} to ${shortDate(st.end)}); the rolling correlation uses 252-day windows sampled monthly. The equity risk premia (${fmtPct(ERP_US, 1)}, ${fmtPct(ERP_INTL, 1)}) are assumptions, not data.`}
+  />
 </div>
+
+<style>
+  .corr td,
+  .corr th {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+  }
+  .muted {
+    color: var(--muted);
+  }
+</style>
 
 <script>
   import { solve, rng, fmt } from '../../lib/stats';
   import { el, clear, axes, path, scale } from '../../lib/svg';
 
-  // Base correlations: [USeq, Intl, UST, IG, Gold]. Stock-bond pairs are set from the regime slider.
-  function corr(rho: number): number[][] {
-    const C = [
-      [1, 0.85, 0, 0.3, 0.05],
-      [0.85, 1, 0, 0.3, 0.1],
-      [0, 0, 1, 0.7, 0.2],
-      [0.3, 0.3, 0.7, 1, 0.1],
-      [0.05, 0.1, 0.2, 0.1, 1],
-    ];
-    C[0][2] = C[2][0] = rho;
-    C[1][2] = C[2][1] = rho * 0.9;
-    return C;
-  }
+  interface Cfg { corr: number[][]; vol: number[]; erYield: number[]; erHist: number[]; rhoNow: number; roll: [string, number][]; start: string; end: string }
+
+  const clamp = (x: number, lo = -0.95, hi = 0.95) => Math.max(lo, Math.min(hi, x));
   const dot = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * b[i], 0);
   const mv = (M: number[][], v: number[]) => M.map((row) => dot(row, v));
 
+  // Estimated correlation matrix with the stock-bond regime overridden: the SPY-IEF entry is set to
+  // rho and the other equity-bond entries (EFA-IEF, SPY-LQD, EFA-LQD) move in parallel by the same shift.
+  function corrWith(base: number[][], rho: number): number[][] {
+    const C = base.map((r) => [...r]);
+    const shift = rho - base[0][2];
+    const set = (i: number, j: number, v: number) => { C[i][j] = C[j][i] = clamp(v); };
+    set(0, 2, rho);
+    set(1, 2, base[1][2] + shift);
+    set(0, 3, base[0][3] + shift);
+    set(1, 3, base[1][3] + shift);
+    return C;
+  }
+
   function init(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.querySelector('script[data-cfg]')!.textContent!);
     const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
     const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
     const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
     const svg = root.querySelector<SVGSVGElement>('svg.fr')!;
-    const n = 5;
-    const read = (attr: string) => Array.from({ length: n }, (_, i) => +root.querySelector<HTMLInputElement>(`[data-${attr}="${i}"]`)!.value || 0);
+    const rsvg = root.querySelector<SVGSVGElement>('svg.roll')!;
+    const n = cfg.vol.length;
+    const cell = (attr: string, i: number) => root.querySelector<HTMLInputElement>(`[data-${attr}="${i}"]`)!;
+    const read = (attr: string) => Array.from({ length: n }, (_, i) => +cell(attr, i).value || 0);
+
+    const applyPreset = () => {
+      const set = q('erset').value === 'hist' ? cfg.erHist : cfg.erYield;
+      set.forEach((v, i) => { cell('er', i).value = String(v); });
+    };
+
+    const drawRoll = (rho: number) => {
+      clear(rsvg);
+      const box = { left: 56, right: 700, top: 12, bottom: 135 };
+      const t0 = new Date(cfg.roll[0][0]).getTime(), t1 = new Date(cfg.roll[cfg.roll.length - 1][0]).getTime();
+      const sx = scale(t0, t1, box.left, box.right), sy = scale(-0.8, 0.8, box.bottom, box.top);
+      const g = el('g');
+      for (const t of [-0.8, -0.4, 0, 0.4, 0.8]) {
+        g.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(t), y2: sy(t), class: t === 0 ? 'axis' : 'grid' }));
+        g.appendChild(el('text', { x: box.left - 6, y: sy(t) + 4, class: 'tick', 'text-anchor': 'end' }, t.toFixed(1)));
+      }
+      const y0 = new Date(cfg.roll[0][0]).getUTCFullYear() + 1, y1 = new Date(cfg.roll[cfg.roll.length - 1][0]).getUTCFullYear();
+      for (let y = y0; y <= y1; y++) {
+        const x = sx(Date.UTC(y, 0, 1));
+        g.appendChild(el('line', { x1: x, x2: x, y1: box.top, y2: box.bottom, class: 'grid' }));
+        g.appendChild(el('text', { x, y: box.bottom + 16, class: 'tick', 'text-anchor': 'middle' }, String(y)));
+      }
+      rsvg.appendChild(g);
+      const pts: [number, number][] = cfg.roll.map(([d, c]) => [sx(new Date(d).getTime()), sy(c)]);
+      rsvg.appendChild(el('path', { d: path(pts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2 }));
+      rsvg.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(rho), y2: sy(rho), stroke: 'var(--c2)', 'stroke-width': 1.5, 'stroke-dasharray': '6 3' }));
+      const last = pts[pts.length - 1];
+      rsvg.appendChild(el('circle', { cx: last[0], cy: last[1], r: 4.5, fill: 'var(--c2)', stroke: 'var(--bg-elev)', 'stroke-width': 1.5 }));
+      rsvg.appendChild(el('text', { x: last[0] - 8, y: last[1] - 8, class: 'lbl', 'text-anchor': 'end' }, `latest ${cfg.rhoNow.toFixed(2)}`));
+      rsvg.appendChild(el('text', { x: box.right, y: sy(rho) - 5, class: 'lbl muted', 'text-anchor': 'end' }, `slider ${rho.toFixed(2)}`));
+      rsvg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 164, class: 'lbl muted', 'text-anchor': 'middle' }, 'rolling 1-year correlation, SPY vs IEF daily returns'));
+    };
 
     const update = () => {
       const rho = +q('rho').value, rf = +q('rf').value, N = +q('n').value;
@@ -103,13 +214,16 @@ const assets = [
       let w = read('w');
       const ws = w.reduce((a, b) => a + b, 0) || 1;
       w = w.map((x) => x / ws);
-      const C = corr(rho);
+      const C = corrWith(cfg.corr, rho);
+      C.forEach((row, i) => row.forEach((c, j) => {
+        const td = root.querySelector<HTMLElement>(`[data-c="${i}-${j}"]`);
+        if (td) { td.textContent = c.toFixed(2); td.style.fontWeight = c !== cfg.corr[i][j] ? '700' : ''; }
+      }));
       const S = C.map((row, i) => row.map((c, j) => c * vol[i] * vol[j]));
       const ones = new Array(n).fill(1);
       const Si1 = solve(S, ones), Simu = solve(S, mu);
       const A = dot(ones, Si1), B = dot(ones, Simu), Cc = dot(mu, Simu), D = A * Cc - B * B;
       const frontierVol = (m: number) => Math.sqrt(Math.max(0, (A * m * m - 2 * B * m + Cc) / D));
-      // Tangency portfolio.
       const ex = mu.map((m) => m - rf);
       const t = solve(S, ex);
       const ts = t.reduce((a, b) => a + b, 0);
@@ -119,12 +233,10 @@ const assets = [
       out('me').textContent = `${fmt.pct(me.m, 2)} / ${fmt.pct(me.v, 2)}`;
       out('sh').textContent = ((me.m - rf) / me.v).toFixed(3);
       out('tan').textContent = `${fmt.pct(tp.m, 2)} / ${fmt.pct(tp.v, 2)} / ${((tp.m - rf) / tp.v).toFixed(3)}`;
-      // Upper branch of the frontier at the portfolio's volatility: mu = (B + sqrt(D (A sigma^2 - 1))) / A.
       const effRet = (B + Math.sqrt(Math.max(0, D * (A * me.v * me.v - 1)))) / A;
       out('eff').textContent = fmt.pct(effRet, 2);
       const gap = effRet - me.m;
-      out('effd').textContent = gap > 0 ? `you give up ${fmt.bp(gap)} / yr vs the frontier` : 'on the frontier';
-      // Risk contributions: w_i * (S w)_i / sigma^2.
+      out('effd').textContent = gap > 0.00005 ? `you give up ${fmt.bp(gap)} / yr vs the frontier` : 'on the frontier';
       const Sw = mv(S, w);
       w.forEach((wi, i) => {
         root.querySelector<HTMLElement>(`[data-rc="${i}"]`)!.textContent = fmt.pct((wi * Sw[i]) / (me.v * me.v || 1), 1);
@@ -138,7 +250,6 @@ const assets = [
       const g = el('g');
       axes(g, sx, sy, [0, vMax], [mMin, mMax], box, (v) => fmt.pct(v, 0), (v) => fmt.pct(v, 0));
       svg.appendChild(g);
-      // Random long-only cloud.
       const u = rng(7);
       for (let k = 0; k < N; k++) {
         const raw = Array.from({ length: n }, () => -Math.log(u()));
@@ -148,7 +259,6 @@ const assets = [
         const shp = (pr.m - rf) / pr.v;
         svg.appendChild(el('circle', { cx: sx(pr.v), cy: sy(pr.m), r: 1.6, fill: 'var(--c6)', opacity: 0.25 + 0.5 * Math.max(0, Math.min(1, shp / 1.2)) }));
       }
-      // Frontier (upper branch) and CML.
       const fpts: [number, number][] = [];
       for (let m = B / A; m <= mMax; m += (mMax - B / A) / 80) fpts.push([sx(frontierVol(m)), sy(m)]);
       svg.appendChild(el('path', { d: path(fpts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2.5 }));
@@ -156,13 +266,16 @@ const assets = [
       svg.appendChild(el('line', { x1: sx(0), y1: sy(rf), x2: sx(vMax), y2: sy(rf + slope * vMax), stroke: 'var(--c2)', 'stroke-width': 1.5, 'stroke-dasharray': '6 3' }));
       mu.forEach((m, i) => {
         svg.appendChild(el('circle', { cx: sx(vol[i]), cy: sy(m), r: 4, fill: 'var(--c3)' }));
-        svg.appendChild(el('text', { x: sx(vol[i]) + 6, y: sy(m) + 4, class: 'tick' }, ['US eq', 'Intl', 'UST', 'IG', 'Gold'][i]));
+        svg.appendChild(el('text', { x: sx(vol[i]) + 6, y: sy(m) + 4, class: 'tick' }, ['SPY', 'EFA', 'IEF', 'LQD', 'GLD'][i]));
       });
       svg.appendChild(el('circle', { cx: sx(tp.v), cy: sy(tp.m), r: 6, fill: 'var(--c2)', stroke: 'var(--bg-elev)', 'stroke-width': 1.5 }));
       svg.appendChild(el('circle', { cx: sx(me.v), cy: sy(me.m), r: 6, fill: 'var(--text)', stroke: 'var(--bg-elev)', 'stroke-width': 1.5 }));
       svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 292, class: 'lbl muted', 'text-anchor': 'middle' }, 'portfolio volatility (annual)'));
+      drawRoll(rho);
     };
+    q('erset').addEventListener('change', () => { applyPreset(); update(); });
     root.querySelectorAll('input').forEach((i) => i.addEventListener('input', update));
+    applyPreset();
     update();
   }
 

@@ -1,0 +1,37 @@
+---
+/**
+ * One-line provenance footer for a model: which public sources its default
+ * inputs come from and the date each was observed. Place it as the last child
+ * of a `.model` panel.
+ */
+interface Source {
+  name: string;
+  asOf?: string; // ISO date or timestamp
+  url?: string;
+}
+interface Props {
+  sources: Source[];
+  /** Extra sentence after the sources, e.g. what is derived rather than observed. */
+  note?: string;
+}
+const { sources, note } = Astro.props;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const fmt = (iso: string) => {
+  const d = new Date(iso.length === 10 ? `${iso}T00:00:00Z` : iso);
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+};
+---
+
+<p class="model-data">
+  <span class="model-data-k">Data</span>
+  {
+    sources.map((s, i) => (
+      <span class="model-data-src">
+        {s.url ? <a href={s.url} rel="noopener">{s.name}</a> : s.name}
+        {s.asOf && <span class="model-data-date"> ({fmt(s.asOf)})</span>}
+        {i < sources.length - 1 && <span class="model-data-sep"> · </span>}
+      </span>
+    ))
+  }
+  {note && <span class="model-data-note"> {note}</span>}
+</p>

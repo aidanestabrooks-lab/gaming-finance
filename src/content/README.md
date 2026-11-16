@@ -69,9 +69,22 @@ Available models live in `src/components/models/`:
 
 LaTeX works in both `.md` and `.mdx`: inline `$x^2$`, display `$$ ... $$`.
 
+### Using the data snapshots in a page
+
+`src/lib/data.ts` exposes the snapshots in `src/data/` (refreshed by `npm run data` and daily by the deploy workflow). In an `.mdx` file you can import it and interpolate live figures so the prose stays correct after each refresh:
+
+```mdx
+import { fred, shortDate } from '../../lib/data';
+export const tenYear = fred.latest('DGS10');
+
+The 10-year Treasury yields {tenYear.toFixed(2)}% as of {shortDate(fred.asOf('DGS10'))}.
+```
+
+Useful calls: `fred.latest(id)`, `fred.yoy('CPIAUCSL')`, `parCurve()`, `parYield(t)`, `assetStats()`, `companies.get('MSFT')` with `companySnapshot()`, `kalshi.fedDecision()`, `fedOutcomes()`, `auctions.byTerm('10-Year')`. Models that take data render a `DataNote` line with the source and date; add one to any new model via `src/components/models/DataNote.astro`.
+
 ## Rules the build enforces
 
-- `tags` must only use the four allowed values, or the build fails with a clear error.
+- `tags` must only use the five allowed values, or the build fails with a clear error.
 - `week` must be a positive whole number.
 - Every `sources` entry needs a valid URL.
 - `takeaways` needs at least one item.

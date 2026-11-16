@@ -3,27 +3,52 @@ title: "The Winner's Curse at the Treasury Auction"
 date: 2026-10-23
 week: 13
 tags: [Game Theory, Markets]
-summary: "When bidders compete for something whose value is the same for everyone but known to nobody, the winner is the bidder who overestimated it the most. Treasury auctions, spectrum sales, and block trades all have this structure. The simulator shows how much a naive bidder loses and how much to shade a bid to break even."
+summary: "When bidders compete for something whose value is the same for everyone but known to nobody, the winner is the bidder who overestimated it the most. Treasury auctions, spectrum sales, and block trades all have this structure. The simulator is calibrated to the dispersion of bids in the last two years of 10-year note auctions and shows how much a naive bidder loses and how much to shade a bid to break even."
 takeaways:
   - "In a common-value auction, winning is bad news: it tells you your signal was the highest of n. Rational bidders shade below their estimate by the expected bias of the top order statistic."
   - "The required shading rises with the number of bidders and with signal noise. More competition means bid less, not more."
-  - "Auction 'tails' (the gap between the stop-out yield and the when-issued yield) are a direct read on how much the crowd shaded. A long tail means bidders were cautious; a stop-through means they were not."
+  - "The gap between an auction's stop-out yield and its median accepted yield is a direct read on bid dispersion, which is the σ of this model. Wider gaps mean a bigger winner's curse and more shading required."
   - "Retail investors face the curse in every competitive process: IPO allocations, block sales, real-estate bidding wars. The cure is the same: condition your valuation on the fact of winning."
 sources:
   - title: "TreasuryDirect: How Treasury auctions work"
     url: https://www.treasurydirect.gov/auctions/how-auctions-work/
+  - title: "TreasuryDirect: auction announcements, data and results"
+    url: https://www.treasurydirect.gov/auctions/announcements-data-results/
   - title: "Milgrom, P. & Weber, R. (1982). A theory of auctions and competitive bidding"
     url: https://www.jstor.org/stable/1911865
   - title: "Thaler, R. (1988). Anomalies: the winner's curse"
     url: https://www.aeaweb.org/articles?id=10.1257/jep.2.1.191
 ---
 import AuctionSim from '../../components/models/AuctionSim.astro';
+import { auctions, shortDate } from '../../lib/data';
+
+export const rows = auctions.byTerm('10-Year', 12);
+export const tails = rows.map((a) => Math.round((a.highYield - a.medianYield) * 1000) / 10);
+export const meanTail = tails.reduce((s, t) => s + t, 0) / tails.length;
+export const maxTail = Math.max(...tails);
+export const minTail = Math.min(...tails);
+export const latest = rows[0];
+export const sigma = Math.max(0.1, Math.round((meanTail * 8) / 100 * 10) / 10);
 
 ## The setup
 
 An object has a true value $V$ that is the same for every bidder. Nobody knows $V$; each bidder sees a noisy estimate $x_i = V + \varepsilon_i$ with $\varepsilon_i \sim N(0,\sigma^2)$. Bids are sealed and the highest wins at their bid. A Treasury note at auction fits this template well: its value next week is set by one market, every dealer has an estimate of that value, and the dealer who thought it was worth the most ends up owning the most.
 
-<AuctionSim id="auction" note="True value uniform on [80, 120]. Monte Carlo on common random numbers so the curve is smooth across shading levels." />
+<AuctionSim id="auction" />
+
+## Calibrating σ to real auctions
+
+Nobody publishes the dispersion of dealers' private estimates, but the Treasury publishes the next best thing after every auction: the high yield (the stop-out, where the last accepted bid landed), the median accepted yield, and the low yield. The gap between high and median is how far the marginal winner's bid sat above the middle of the accepted crowd, in yield. Over the last {rows.length} 10-year note auctions that gap averaged {meanTail.toFixed(1)} basis points, ranging from {minTail.toFixed(1)} to {maxTail.toFixed(1)}; the most recent auction, on {shortDate(latest.auctionDate)}, stopped at {latest.highYield.toFixed(3)}% with a median of {latest.medianYield.toFixed(3)}%.
+
+A 10-year note has a modified duration near 8, so one basis point of yield is about 0.08 points of price per $100 face. The simulator's default σ is therefore
+
+$$
+\sigma \approx \frac{\operatorname{mean}(y_{\text{high}} - y_{\text{median}}) \times 8}{100}
+$$
+
+which comes to {sigma.toFixed(1)} price points on the current data.
+
+That is the scale of disagreement among bidders who all have Bloomberg terminals and the same when-issued quote in front of them. It is small in price terms and large in money terms: a quarter point on a $42 billion auction is about $100 million of value moving between winners and losers.
 
 ## The curse in one line
 
@@ -33,7 +58,7 @@ $$
 \mathbb{E}\big[\max_i x_i\big] = V + \sigma\, \mathbb{E}\big[\max_i z_i\big], \qquad z_i \sim N(0,1)
 $$
 
-For $n = 6$ the expected maximum of standard normals is about 1.27; for $n = 20$ it is about 1.87. A bidder who bids their own estimate and wins has, on average, paid $V + 1.27\sigma$ for something worth $V$. The simulator's "expected bias of the highest signal" box reports this quantity for your settings, and "winner's expected profit" at zero shading is its negative.
+For $n = 6$ the expected maximum of standard normals is about 1.27; for $n = 20$ it is about 1.87. A bidder who bids their own estimate and wins has, on average, paid $V + 1.27\sigma$ for something worth $V$. With σ calibrated to the auction data, the "break-even shading in yield" box converts that bias back into basis points, so you can compare it with the tails in the table. The simulator's "expected bias of the highest signal" box reports this quantity for your settings, and "winner's expected profit" at zero shading is its negative.
 
 ## Shading
 
@@ -43,7 +68,7 @@ The simulator exposes two parameters to drag. Raise $n$ and the required shading
 
 ## Reading auction results
 
-Treasury auction statistics are a live read on this game. The **tail** is the stop-out yield minus the when-issued yield at the deadline. A positive tail means the marginal winning bid was below the market's prior estimate of value, which is to say bidders shaded. A **stop-through** means winners paid more than the pre-auction market thought the notes were worth: either new information arrived or the crowd under-shaded. The **bid-to-cover** ratio is a proxy for $n$. Rising bid-to-cover with persistent tails is a market that has learned to shade; rising bid-to-cover with stop-throughs is a market that is about to learn.
+Treasury auction statistics are a read on this game, and the table under the simulator shows the last {rows.length} of them. Dealers quote the **tail** as the stop-out yield minus the when-issued yield at the deadline; the Treasury does not publish the when-issued level, so the table uses the stop-out minus the median accepted yield, which measures the same dispersion from inside the auction. A wide gap means the marginal winner bid well away from the crowd, which is to say someone shaded less than everyone else. The **bid-to-cover** ratio is a proxy for $n$; the dealer, direct and indirect award shares show who ended up owning the notes. Rising bid-to-cover with persistent dispersion is a market that has learned to shade; rising bid-to-cover with narrowing dispersion is a market that is about to learn.
 
 ## What this means for investors
 

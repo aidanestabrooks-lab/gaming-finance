@@ -1,26 +1,63 @@
 ---
 /**
  * Multi-outcome "Dutch book" scanner for a set of mutually exclusive, exhaustive
- * event contracts (e.g. the buckets of a "where will the Fed funds rate be" market).
- * Prices in cents. Fees follow Kalshi's published quadratic schedule:
- * fee = ceil(rate x C x P x (1 - P)) in cents, per order.
+ * event contracts. By default it loads the real Kalshi Fed-decision events from
+ * the data snapshot (one per upcoming FOMC meeting), with each outcome's actual
+ * YES ask and NO ask, volume and open interest. Prices in cents. Fees follow
+ * Kalshi's published quadratic schedule: fee = ceil(rate x C x P x (1 - P))
+ * in cents, per order. Pass `buckets` to override the data with a fixed partition.
  */
+import { kalshi, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
+interface Bucket { label: string; yes: number; no?: number; yesBid?: number | null; volume?: number | null; oi?: number | null }
 interface Props {
   id: string;
-  market: string;
-  buckets: { label: string; yes: number }[];
+  market?: string;
+  buckets?: Bucket[];
   title?: string;
   note?: string;
 }
 const { id, market, buckets, title = 'Bucket arbitrage scanner', note } = Astro.props;
+
+type EventCfg = { ticker: string; title: string; close: string; buckets: Bucket[] };
+const events: EventCfg[] = buckets
+  ? [{ ticker: 'custom', title: market ?? 'Custom partition', close: '', buckets }]
+  : kalshi.series('KXFEDDECISION').filter((e) => e.mutually_exclusive).map((e) => ({
+      ticker: e.event_ticker,
+      title: e.title,
+      close: e.markets[0]?.close_time ?? '',
+      buckets: e.markets.map((m) => ({
+        label: m.label,
+        yes: Math.min(99, Math.max(1, m.yes_ask ?? 50)),
+        no: Math.min(99, Math.max(1, m.no_ask ?? 100 - (m.yes_ask ?? 50))),
+        yesBid: m.yes_bid,
+        volume: m.volume,
+        oi: m.open_interest,
+      })),
+    }));
+const first = events[0];
+const nRows = Math.max(...events.map((e) => e.buckets.length));
+const fetched = kalshi.fetched;
 ---
 
 <div class="model" data-model="bucket" id={id}>
+  <script type="application/json" data-cfg set:html={JSON.stringify({ events })} />
   <div class="model-head">
     <p class="model-title">{title}</p>
-    <p class="model-note">{note ?? market}</p>
+    <p class="model-note">{note ?? (buckets ? market : `Kalshi event contracts on the next FOMC decisions. Snapshot taken ${shortDate(fetched)}; quotes move intraday.`)}</p>
   </div>
   <div class="controls">
+    {
+      events.length > 1 && (
+        <label class="ctl">
+          <span class="lab"><span>Market (Kalshi event)</span></span>
+          <select data-in="ev">
+            {events.map((e, i) => <option value={i} selected={i === 0}>{e.title}{e.close ? ` · closes ${shortDate(e.close)}` : ''}</option>)}
+          </select>
+        </label>
+      )
+    }
     <label class="ctl">
       <span class="lab"><span>Contracts per bucket (C)</span><output data-o="c">100</output></span>
       <input type="range" min="1" max="1000" step="1" value="100" data-in="c" />
@@ -38,22 +75,28 @@ const { id, market, buckets, title = 'Bucket arbitrage scanner', note } = Astro.
     <div class="table-scroll">
       <table>
         <thead>
-          <tr><th>Bucket</th><th>YES ask (¢)</th><th>NO ask (¢)</th><th>Fee / contract</th></tr>
+          <tr><th>Outcome</th><th>YES bid</th><th>YES ask (¢)</th><th>NO ask (¢)</th><th>Fee / contract</th><th>Volume</th><th>Open int.</th></tr>
         </thead>
         <tbody>
           {
-            buckets.map((b, i) => (
-              <tr>
-                <td>{b.label}</td>
-                <td><input type="number" min="1" max="99" step="1" value={b.yes} data-b={i} aria-label={`YES price for ${b.label}`} /></td>
-                <td data-no={i}>–</td>
-                <td data-fee={i}>–</td>
-              </tr>
-            ))
+            Array.from({ length: nRows }, (_, i) => {
+              const b = first.buckets[i];
+              return (
+                <tr data-row={i} hidden={!b}>
+                  <td data-lbl={i}>{b?.label ?? ''}</td>
+                  <td data-bid={i}>{b?.yesBid != null ? `${b.yesBid}¢` : '–'}</td>
+                  <td><input type="number" min="1" max="99" step="1" value={b?.yes ?? 50} data-b={i} aria-label="YES ask price" /></td>
+                  <td><input type="number" min="1" max="99" step="1" value={b?.no ?? 100 - (b?.yes ?? 50)} data-n={i} aria-label="NO ask price" /></td>
+                  <td data-fee={i}>–</td>
+                  <td data-vol={i}>–</td>
+                  <td data-oi={i}>–</td>
+                </tr>
+              );
+            })
           }
         </tbody>
         <tfoot>
-          <tr><th>Sum of YES prices</th><th data-out="sumyes">–</th><th data-out="sumno">–</th><th data-out="sumfee">–</th></tr>
+          <tr><th>Sum</th><th></th><th data-out="sumyes">–</th><th data-out="sumno">–</th><th data-out="sumfee">–</th><th></th><th></th></tr>
         </tfoot>
       </table>
     </div>
@@ -67,35 +110,68 @@ const { id, market, buckets, title = 'Bucket arbitrage scanner', note } = Astro.
       </div>
     </div>
   </div>
+  {
+    !buckets && (
+      <DataNote
+        sources={[{ name: 'Kalshi market data API (yes/no bid and ask, volume, open interest)', asOf: fetched, url: 'https://kalshi.com' }]}
+        note="Prices are a build-time snapshot refreshed daily, not a live feed. Edit any ask to test a quote you see on the exchange."
+      />
+    )
+  }
 </div>
 
 <script>
   import { el, clear } from '../../lib/svg';
   import { fmt } from '../../lib/stats';
 
+  type Bucket = { label: string; yes: number; no?: number; yesBid?: number | null; volume?: number | null; oi?: number | null };
+  type Cfg = { events: { ticker: string; title: string; close: string; buckets: Bucket[] }[] };
+
   // Kalshi rounds the fee on each order up to the next cent.
   const orderFee = (rate: number, C: number, P: number) => Math.ceil(100 * rate * C * P * (1 - P)) / 100;
+  const big = (x: number | null | undefined) => (x == null ? '–' : x >= 1e6 ? `${(x / 1e6).toFixed(2)}M` : x >= 1e3 ? `${(x / 1e3).toFixed(0)}k` : x.toFixed(0));
 
   function init(root: HTMLElement) {
-    const inputs = Array.from(root.querySelectorAll<HTMLInputElement>('input[data-b]'));
+    const cfg: Cfg = JSON.parse(root.querySelector('[data-cfg]')!.textContent || '{"events":[]}');
+    const yesIn = Array.from(root.querySelectorAll<HTMLInputElement>('input[data-b]'));
+    const noIn = Array.from(root.querySelectorAll<HTMLInputElement>('input[data-n]'));
     const cIn = root.querySelector<HTMLInputElement>('[data-in="c"]')!;
     const feeIn = root.querySelector<HTMLSelectElement>('[data-in="fee"]')!;
+    const evIn = root.querySelector<HTMLSelectElement>('[data-in="ev"]');
     const svg = root.querySelector<SVGSVGElement>('svg.bar')!;
     const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
+    const cell = (k: string, i: number) => root.querySelector<HTMLElement>(`[data-${k}="${i}"]`)!;
+
+    const load = () => {
+      const ev = cfg.events[evIn ? +evIn.value : 0];
+      yesIn.forEach((inp, i) => {
+        const b = ev.buckets[i];
+        const row = root.querySelector<HTMLTableRowElement>(`tr[data-row="${i}"]`)!;
+        row.hidden = !b;
+        if (!b) return;
+        cell('lbl', i).textContent = b.label;
+        cell('bid', i).textContent = b.yesBid != null ? `${b.yesBid}¢` : '–';
+        inp.value = String(b.yes);
+        noIn[i].value = String(b.no ?? 100 - b.yes);
+        cell('vol', i).textContent = big(b.volume);
+        cell('oi', i).textContent = big(b.oi);
+      });
+    };
 
     const update = () => {
       const C = +cIn.value;
       const rate = +feeIn.value;
       root.querySelector<HTMLElement>('[data-o="c"]')!.textContent = String(C);
-      const P = inputs.map((i) => Math.min(99, Math.max(1, +i.value || 1)) / 100);
+      const active = yesIn.map((_, i) => i).filter((i) => !root.querySelector<HTMLTableRowElement>(`tr[data-row="${i}"]`)!.hidden);
+      const P = active.map((i) => Math.min(99, Math.max(1, +yesIn[i].value || 1)) / 100);
+      const Q = active.map((i) => Math.min(99, Math.max(1, +noIn[i].value || 1)) / 100);
       const N = P.length;
       let sumYes = 0, sumNo = 0, feeYes = 0, feeNo = 0;
-      P.forEach((p, i) => {
+      P.forEach((p, j) => {
         const fy = orderFee(rate, C, p);
-        const fn = orderFee(rate, C, 1 - p);
-        sumYes += p; sumNo += 1 - p; feeYes += fy; feeNo += fn;
-        root.querySelector<HTMLElement>(`[data-no="${i}"]`)!.textContent = fmt.cents(1 - p);
-        root.querySelector<HTMLElement>(`[data-fee="${i}"]`)!.textContent = fmt.usd(fy / C, 4);
+        const fn = orderFee(rate, C, Q[j]);
+        sumYes += p; sumNo += Q[j]; feeYes += fy; feeNo += fn;
+        cell('fee', active[j]).textContent = fmt.usd(fy / C, 4);
       });
       out('sumyes').textContent = fmt.cents(sumYes);
       out('sumno').textContent = fmt.cents(sumNo);
@@ -104,7 +180,7 @@ const { id, market, buckets, title = 'Bucket arbitrage scanner', note } = Astro.
       // Buy all YES: cost = C * sumYes + fees; exactly one bucket pays C.
       const yesCost = C * sumYes + feeYes;
       const yesProfit = C - yesCost;
-      // Buy all NO: cost = C * sumNo + fees; N-1 buckets pay C each.
+      // Buy all NO at the real NO asks: cost = C * sumNo + fees; N-1 buckets pay C each.
       const noCost = C * sumNo + feeNo;
       const noProfit = C * (N - 1) - noCost;
 
@@ -136,10 +212,12 @@ const { id, market, buckets, title = 'Bucket arbitrage scanner', note } = Astro.
       svg.appendChild(el('line', { x1: sx(1), x2: sx(1), y1: y - 12, y2: y + h + 12, stroke: 'var(--text)', 'stroke-width': 2, 'stroke-dasharray': '4 3' }));
       svg.appendChild(el('text', { x: sx(1), y: y - 16, class: 'lbl', 'text-anchor': 'middle' }, '$1.00 payout'));
       svg.appendChild(el('text', { x: sx(sumYes), y: y + h + 26, class: 'lbl mono', 'text-anchor': 'middle' }, `ΣYES = ${fmt.cents(sumYes)}`));
-      svg.appendChild(el('text', { x: L, y: y + h + 44, class: 'tick' }, 'Each block is one bucket’s YES price'));
+      svg.appendChild(el('text', { x: L, y: y + h + 44, class: 'tick' }, 'Each block is one outcome’s YES ask'));
     };
 
-    [...inputs, cIn, feeIn].forEach((i) => i.addEventListener('input', update));
+    [...yesIn, ...noIn, cIn, feeIn].forEach((i) => i.addEventListener('input', update));
+    evIn?.addEventListener('change', () => { load(); update(); });
+    load();
     update();
   }
 

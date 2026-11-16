@@ -3,20 +3,60 @@
  * Common-value auction and the winner's curse. True value V ~ U[80, 120];
  * each of n bidders sees a noisy signal x_i = V + e_i, e_i ~ N(0, sigma).
  * Every bidder bids x_i - k*sigma. Monte Carlo over k shows that bidding your
- * signal loses money, and finds the shading that maximizes the winner's profit.
+ * signal loses money, and finds the shading that breaks even.
+ *
+ * The default signal noise is calibrated from real 10-year Treasury auctions in
+ * the data snapshot: the mean gap between the high (stop-out) yield and the
+ * median accepted yield, in basis points, converted to price points with a
+ * stated duration. The table below the chart lists the auctions themselves.
  */
+import { auctions, shortDate } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
 interface Props {
   id: string;
   title?: string;
   note?: string;
+  term?: string;
+  duration?: number; // price points per 1% yield, used to turn bp into price
 }
-const { id, title = 'Winner’s curse simulator', note } = Astro.props;
+const { id, title = 'Winner’s curse simulator', note, term = '10-Year', duration = 8 } = Astro.props;
+
+const rows = auctions.byTerm(term, 12).map((a) => {
+  const comp = (a.primaryDealersCompetitiveParAwarded ?? 0) + (a.directBiddersCompetitiveParAwarded ?? 0) + (a.indirectBiddersCompetitiveParAwarded ?? 0);
+  const sh = (x?: number) => (comp > 0 && x != null ? (100 * x) / comp : null);
+  return {
+    date: a.auctionDate,
+    term: a.securityTerm,
+    reopening: a.reopening === 'Yes',
+    coupon: a.interestRate ?? null,
+    high: a.highYield!,
+    median: a.medianYield!,
+    low: a.lowYield ?? null,
+    tailBp: Math.round((a.highYield! - a.medianYield!) * 1000) / 10,
+    b2c: a.bidToCoverRatio ?? null,
+    size: a.offeringAmount != null ? a.offeringAmount / 1e9 : null,
+    dealers: sh(a.primaryDealersCompetitiveParAwarded),
+    directs: sh(a.directBiddersCompetitiveParAwarded),
+    indirects: sh(a.indirectBiddersCompetitiveParAwarded),
+  };
+});
+const meanTailBp = rows.length ? rows.reduce((s, r) => s + r.tailBp, 0) / rows.length : 5;
+const meanB2c = rows.length ? rows.reduce((s, r) => s + (r.b2c ?? 0), 0) / rows.filter((r) => r.b2c != null).length : NaN;
+// 1 bp of yield on a note with the stated duration moves price by duration/100 points.
+const sigmaDefault = Math.max(0.1, Math.round((meanTailBp * duration) / 100 * 10) / 10);
+const latest = rows[0];
+const f1 = (x: number | null) => (x == null ? '–' : x.toFixed(1));
+const f3 = (x: number | null) => (x == null ? '–' : x.toFixed(3));
 ---
 
 <div class="model" data-model="auction" id={id}>
+  <script type="application/json" data-cfg set:html={JSON.stringify({ sigmaDefault, meanTailBp, duration, n: rows.length })} />
   <div class="model-head">
     <p class="model-title">{title}</p>
-    {note && <p class="model-note">{note}</p>}
+    <p class="model-note">
+      {note ?? `Signal noise σ defaults to the mean high-minus-median yield gap of the last ${rows.length} ${term} note auctions (${meanTailBp.toFixed(1)} bp), converted to price points at a duration of ${duration}: ${sigmaDefault.toFixed(1)} points per $100 face.`}
+    </p>
   </div>
   <div class="controls">
     <label class="ctl">
@@ -24,8 +64,8 @@ const { id, title = 'Winner’s curse simulator', note } = Astro.props;
       <input type="range" min="2" max="25" step="1" value="6" data-in="n" />
     </label>
     <label class="ctl">
-      <span class="lab"><span>Signal noise σ</span><output data-o="sg">8.0</output></span>
-      <input type="range" min="1" max="25" step="0.5" value="8" data-in="sg" />
+      <span class="lab"><span>Signal noise σ (price points)</span><output data-o="sg">{sigmaDefault.toFixed(1)}</output></span>
+      <input type="range" min="0.1" max="25" step="0.1" value={sigmaDefault} data-in="sg" />
     </label>
     <label class="ctl">
       <span class="lab"><span>Your shading (k·σ)</span><output data-o="k">0.0</output></span>
@@ -41,22 +81,73 @@ const { id, title = 'Winner’s curse simulator', note } = Astro.props;
     <div class="stat"><div class="k">P(winner overpays)</div><div class="v" data-out="over">–</div></div>
     <div class="stat"><div class="k">Expected bias of the highest signal</div><div class="v" data-out="bias">–</div></div>
     <div class="stat"><div class="k">Break-even shading (= expected bias)</div><div class="v" data-out="kstar">–</div></div>
-    <div class="stat"><div class="k">Profit at break-even shading</div><div class="v" data-out="pstar">–</div></div>
+    <div class="stat"><div class="k">Break-even shading in yield</div><div class="v" data-out="kbp">–</div></div>
     <div class="stat"><div class="k">Win rate at your k (symmetric)</div><div class="v" data-out="win">–</div></div>
   </div>
   <svg class="curve" viewBox="0 0 720 240" role="img" aria-label="Winner profit against shading"></svg>
   <div class="legend">
     <span><i style="background: var(--c1)"></i>Expected winner profit (all bidders shade k·σ)</span>
     <span><i style="background: var(--c2)"></i>Your k</span>
-    <span><i style="background: var(--text)"></i>Optimum</span>
+    <span><i style="background: var(--text)"></i>Break-even</span>
   </div>
+  {
+    rows.length > 0 && (
+      <>
+        <p class="readout">
+          The last {rows.length} {term} note auctions. <strong>Tail</strong> here is the high (stop-out) yield minus the median accepted yield: how far the marginal winner bid above the crowd. Latest: {shortDate(latest.date)}, high {latest.high.toFixed(3)}%, tail {latest.tailBp.toFixed(1)} bp, bid-to-cover {f1(latest.b2c) === '–' ? '–' : latest.b2c!.toFixed(2)} (average {Number.isFinite(meanB2c) ? meanB2c.toFixed(2) : '–'}).
+        </p>
+        <div class="table-scroll">
+          <table class="auctions">
+            <thead>
+              <tr><th>Auction</th><th>Term</th><th>Coupon</th><th>High yield</th><th>Median</th><th>Low</th><th>Tail (bp)</th><th>Bid-to-cover</th><th>Size ($bn)</th><th>Dealers</th><th>Directs</th><th>Indirects</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr>
+                  <td>{shortDate(r.date)}</td>
+                  <td>{r.reopening ? `Reopening (${r.term})` : 'New issue'}</td>
+                  <td>{f3(r.coupon)}%</td>
+                  <td>{r.high.toFixed(3)}%</td>
+                  <td>{r.median.toFixed(3)}%</td>
+                  <td>{f3(r.low)}%</td>
+                  <td>{r.tailBp.toFixed(1)}</td>
+                  <td>{r.b2c?.toFixed(2) ?? '–'}</td>
+                  <td>{r.size != null ? r.size.toFixed(0) : '–'}</td>
+                  <td>{f1(r.dealers)}%</td>
+                  <td>{f1(r.directs)}%</td>
+                  <td>{f1(r.indirects)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <DataNote
+          sources={[{ name: 'TreasuryDirect auction results (note and bond auctions, last two years)', asOf: auctions.fetched, url: 'https://www.treasurydirect.gov/auctions/announcements-data-results/' }]}
+          note="Award shares are each bidder class's competitive par awarded as a percent of all competitive par awarded. Build-time snapshot refreshed daily. The true value in the simulation is still drawn from a uniform distribution; only σ is calibrated."
+        />
+      </>
+    )
+  }
 </div>
+
+<style>
+  .auctions td {
+    font-family: var(--mono);
+    font-size: 0.82rem;
+    white-space: nowrap;
+  }
+  .auctions td:first-child,
+  .auctions td:nth-child(2) {
+    font-family: inherit;
+  }
+</style>
 
 <script>
   import { rng, randn, fmt } from '../../lib/stats';
   import { el, clear, axes, path, scale } from '../../lib/svg';
 
   function init(root: HTMLElement) {
+    const cfg: { duration: number } = JSON.parse(root.querySelector('[data-cfg]')!.textContent || '{"duration":8}');
     const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
     const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
     const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
@@ -82,24 +173,25 @@ const { id, title = 'Winner’s curse simulator', note } = Astro.props;
       // With symmetric shading the highest signal always wins, so the winner's profit is linear in k.
       // The economically meaningful point is where it crosses zero: the expected bias of the top order statistic.
       const bias = maxSig.reduce((a, b) => a + b, 0) / M - V.reduce((a, b) => a + b, 0) / M;
-      const kStar = bias / sg, pStar = profitAt(kStar);
+      const kStar = bias / sg;
 
       const pm = profitAt(kMine);
       const pe = out('profit');
-      pe.textContent = `${pm >= 0 ? '+' : '−'}${fmt.usd(Math.abs(pm))}`;
+      pe.textContent = `${pm >= 0 ? '+' : '−'}${fmt.usd(Math.abs(pm))} per $100 face`;
       pe.className = 'v ' + (pm > 0 ? 'pos' : 'neg');
       out('over').textContent = fmt.pct(overAt(kMine), 1);
       out('bias').textContent = `+${fmt.usd(bias)} (${(bias / sg).toFixed(2)}σ)`;
       out('kstar').textContent = `${kStar.toFixed(2)}σ = ${fmt.usd(kStar * sg)}`;
-      out('pstar').textContent = `≈ ${fmt.usd(pStar)} (break-even)`;
+      // Price points back to yield: bp = points / duration × 100.
+      out('kbp').textContent = `≈ ${((kStar * sg * 100) / cfg.duration).toFixed(1)} bp above the crowd’s estimate`;
       out('win').textContent = fmt.pct(1 / n, 1);
 
       clear(svg);
       const box = { left: 60, right: 700, top: 14, bottom: 200 };
-      const lo = Math.min(...ps, 0) * 1.1, hi = Math.max(...ps, 1) * 1.1;
+      const lo = Math.min(...ps, 0) * 1.1, hi = Math.max(...ps, 0.1) * 1.1;
       const sx = scale(0, 3, box.left, box.right), sy = scale(lo, hi, box.bottom, box.top);
       const g = el('g');
-      axes(g, sx, sy, [0, 3], [lo, hi], box, (v) => `${v.toFixed(1)}σ`, (v) => fmt.usd(v, 0));
+      axes(g, sx, sy, [0, 3], [lo, hi], box, (v) => `${v.toFixed(1)}σ`, (v) => fmt.usd(v, 2));
       svg.appendChild(g);
       svg.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(0), y2: sy(0), stroke: 'var(--muted)', 'stroke-dasharray': '3 3' }));
       svg.appendChild(el('path', { d: path(ks.map((k, i) => [sx(k), sy(ps[i])])), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2.5 }));

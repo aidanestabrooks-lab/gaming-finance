@@ -3,6 +3,10 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+  schedule:
+    # Weekdays at 12:30 UTC (07:30 ET): Treasury yields, FRED series and overnight
+    # prediction-market quotes are posted by then. Refreshes the model data and redeploys.
+    - cron: '30 12 * * 1-5'
   workflow_dispatch:
 
 permissions:
@@ -24,6 +28,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Refresh model data from public sources
+        # Each source fails independently; a failed source keeps the snapshot committed in src/data.
+        run: npm run data
+        continue-on-error: true
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -4,28 +4,100 @@
  * call on the firm's assets struck at the face value of debt. Outputs the
  * risk-neutral default probability, distance to default, implied credit spread,
  * and expected recovery, plus a spread-versus-leverage curve at several vols.
+ *
+ * Inputs are calibrated to listed companies in src/data/companies.json: market
+ * capitalization E, one-year realized equity volatility sigma_E, and total debt D
+ * are observed; asset value V and asset volatility sigma_A are solved from the two
+ * Merton equations  E = V N(d1) - D e^{-rT} N(d2)  and  sigma_E E = N(d1) sigma_A V.
  */
+import { companies, companySnapshot, fred, shortDate } from '../../lib/data';
+import { normCdf } from '../../lib/stats';
+import DataNote from './DataNote.astro';
+
 interface Props {
   id: string;
   title?: string;
   note?: string;
+  /** Ticker selected on load. */
+  company?: string;
 }
-const { id, title = 'Merton model: equity as a call on assets', note } = Astro.props;
+const { id, title = 'Merton model: equity as a call on assets', note, company = 'CHTR' } = Astro.props;
+
+const rf = fred.latest('DGS1') / 100;
+const T0 = 5; // years: closer to the average maturity of term debt; at 1 year most spreads round to zero
+
+/** Solve V and sigma_A from observed E, sigma_E, D at horizon T and rate r. Bisection on V inside a fixed-point on sigma_A. */
+function calibrate(E: number, sE: number, D: number, T: number, r: number) {
+  let sA = (sE * E) / (E + D);
+  let V = E + D * Math.exp(-r * T);
+  for (let it = 0; it < 200; it++) {
+    const eq = (v: number) => {
+      const sT = sA * Math.sqrt(T);
+      const d1 = (Math.log(v / D) + (r + 0.5 * sA * sA) * T) / sT;
+      return v * normCdf(d1) - D * Math.exp(-r * T) * normCdf(d1 - sT) - E;
+    };
+    let lo = E, hi = E + D * Math.exp(-r * T) + 1e-9;
+    for (let k = 0; k < 100; k++) {
+      const mid = 0.5 * (lo + hi);
+      if (eq(mid) > 0) hi = mid; else lo = mid;
+    }
+    V = 0.5 * (lo + hi);
+    const d1 = (Math.log(V / D) + (r + 0.5 * sA * sA) * T) / (sA * Math.sqrt(T));
+    const next = (sE * E) / (normCdf(d1) * V);
+    const done = Math.abs(next - sA) < 1e-7;
+    sA = 0.5 * sA + 0.5 * next;
+    if (done) break;
+  }
+  return { V, sA };
+}
+
+const ordered = [...companies.levered, ...companies.hyperscalers];
+const cfg = ordered.map((c) => {
+  const s = companySnapshot(c);
+  const E = s.marketCap / 1e9, D = s.totalDebt / 1e9, sE = s.equityVol1y;
+  const cal = calibrate(E, sE, D, T0, rf);
+  return {
+    ticker: s.ticker, name: s.name, group: c.group,
+    E, sE, D, V: cal.V, sA: cal.sA, lev: D / cal.V,
+    priceDate: s.priceDate, bsDate: s.balanceSheetDate, ebitMargin: s.ebitMargin, interest: s.interestExpenseTTM / 1e9,
+  };
+});
+const d0 = cfg.find((c) => c.ticker === company) ?? cfg[0];
+const hy = fred.latest('BAMLH0A0HYM2'), ig = fred.latest('BAMLC0A0CM');
+const fmtB = (x: number) => `$${x.toFixed(x < 10 ? 2 : x < 100 ? 1 : 0)}B`;
+const pct = (x: number, d = 1) => `${(100 * x).toFixed(d)}%`;
+const rng = (x: number, lo: number, hi: number) => ({ min: +(x * lo).toPrecision(3), max: +(x * hi).toPrecision(3), step: +((x * (hi - lo)) / 400).toPrecision(2) });
+const vR = rng(d0.V, 0.2, 2), dR = rng(d0.D, 0.1, 2.5);
 ---
 
 <div class="model" data-model="merton" id={id}>
   <div class="model-head">
     <p class="model-title">{title}</p>
-    {note && <p class="model-note">{note}</p>}
+    <p class="model-note">{note ?? 'Listed borrowers, $ billions. Equity value and equity volatility are observed; asset value and asset volatility are solved from them.'}</p>
   </div>
+  <script type="application/json" data-cfg set:html={JSON.stringify({ rf, companies: cfg, hy, ig })} />
   <div class="controls">
-    <label class="ctl"><span class="lab"><span>Asset value (V)</span><output data-o="v">$1,000M</output></span><input type="range" min="100" max="3000" step="10" value="1000" data-in="v" /></label>
-    <label class="ctl"><span class="lab"><span>Face value of debt (D)</span><output data-o="d">$700M</output></span><input type="range" min="50" max="2500" step="10" value="700" data-in="d" /></label>
-    <label class="ctl"><span class="lab"><span>Asset volatility σ<sub>A</sub></span><output data-o="s">25%</output></span><input type="range" min="0.05" max="0.8" step="0.01" value="0.25" data-in="s" /></label>
-    <label class="ctl"><span class="lab"><span>Time to maturity (T)</span><output data-o="t">3.0 yrs</output></span><input type="range" min="0.25" max="10" step="0.25" value="3" data-in="t" /></label>
-    <label class="ctl"><span class="lab"><span>Risk-free rate</span><output data-o="r">4.0%</output></span><input type="range" min="0" max="0.1" step="0.0025" value="0.04" data-in="r" /></label>
+    <label class="ctl"><span class="lab"><span>Company</span></span>
+      <select data-in="company">
+        <optgroup label="Levered issuers">{cfg.filter((c) => c.group === 'levered').map((c) => <option value={c.ticker} selected={c.ticker === d0.ticker}>{c.name} ({c.ticker})</option>)}</optgroup>
+        <optgroup label="Hyperscalers, for contrast">{cfg.filter((c) => c.group === 'hyperscaler').map((c) => <option value={c.ticker} selected={c.ticker === d0.ticker}>{c.name} ({c.ticker})</option>)}</optgroup>
+      </select>
+    </label>
+    <label class="ctl"><span class="lab"><span>Keep V and σ<sub>A</sub> calibrated to market</span></span><span class="lab"><input type="checkbox" checked data-in="cal" /> <span>re-solve when D, T or r move</span></span></label>
+    <label class="ctl"><span class="lab"><span>Asset value (V)</span><output data-o="v">{fmtB(d0.V)}</output></span><input type="range" min={vR.min} max={vR.max} step={vR.step} value={d0.V} data-in="v" /></label>
+    <label class="ctl"><span class="lab"><span>Face value of debt (D)</span><output data-o="d">{fmtB(d0.D)}</output></span><input type="range" min={dR.min} max={dR.max} step={dR.step} value={d0.D} data-in="d" /></label>
+    <label class="ctl"><span class="lab"><span>Asset volatility σ<sub>A</sub></span><output data-o="s">{pct(d0.sA)}</output></span><input type="range" min="0.02" max="1" step="0.005" value={+d0.sA.toFixed(3)} data-in="s" /></label>
+    <label class="ctl"><span class="lab"><span>Time to maturity (T)</span><output data-o="t">{T0.toFixed(2)} yrs</output></span><input type="range" min="0.25" max="10" step="0.25" value={T0} data-in="t" /></label>
+    <label class="ctl"><span class="lab"><span>Risk-free rate (1-year Treasury)</span><output data-o="r">{pct(rf, 2)}</output></span><input type="range" min="0" max="0.1" step="0.0005" value={+rf.toFixed(4)} data-in="r" /></label>
     <label class="ctl"><span class="lab"><span>Expected asset return μ (for real-world DD)</span><output data-o="mu">7.0%</output></span><input type="range" min="0" max="0.2" step="0.005" value="0.07" data-in="mu" /></label>
   </div>
+  <div class="table-scroll">
+    <table class="cal">
+      <thead><tr><th>Calibration</th><th>Equity E (market cap)</th><th>σ<sub>E</sub> (1-yr realized)</th><th>Debt D (total, face)</th><th>Solved V</th><th>Solved σ<sub>A</sub></th><th>D / V</th><th>Model σ<sub>E</sub> check</th></tr></thead>
+      <tbody><tr data-out="calrow"><td colspan="8">–</td></tr></tbody>
+    </table>
+  </div>
+  <p class="readout" data-out="cmp">–</p>
   <div class="stats">
     <div class="stat"><div class="k">Equity value</div><div class="v" data-out="e">–</div></div>
     <div class="stat"><div class="k">Debt value</div><div class="v" data-out="b">–</div></div>
@@ -44,11 +116,29 @@ const { id, title = 'Merton model: equity as a call on assets', note } = Astro.p
     <span><i style="background: var(--c3)"></i>σ<sub>A</sub> = 40%</span>
     <span><i style="background: var(--text); border-radius: 50%"></i>This firm</span>
   </div>
+  <DataNote
+    sources={[
+      { name: 'Yahoo Finance: market capitalization, daily closes, total debt as filed', asOf: d0.priceDate, url: 'https://finance.yahoo.com/' },
+      { name: 'FRED DGS1 (1-year Treasury)', asOf: fred.asOf('DGS1'), url: 'https://fred.stlouisfed.org/series/DGS1' },
+      { name: 'FRED BAMLH0A0HYM2 and BAMLC0A0CM (ICE BofA HY and IG OAS)', asOf: fred.asOf('BAMLH0A0HYM2'), url: 'https://fred.stlouisfed.org/series/BAMLH0A0HYM2' },
+    ]}
+    note={`Derived: equity volatility is the annualized standard deviation of the last 252 daily log returns; V and σA solve the two Merton equations at the chosen T and r; total debt is treated as a single zero-coupon claim at face (balance sheet dated ${d0.bsDate}). Snapshot refreshed ${shortDate(companies.fetched)}.`}
+  />
 </div>
 
+<style>
+  .cal td,
+  .cal th {
+    font-size: 0.85rem;
+  }
+</style>
+
 <script>
-  import { normCdf, normPdf, fmt } from '../../lib/stats';
+  import { normCdf, fmt } from '../../lib/stats';
   import { el, clear, axes, path, scale } from '../../lib/svg';
+
+  interface Co { ticker: string; name: string; group: string; E: number; sE: number; D: number; V: number; sA: number; lev: number; priceDate: string; bsDate: string; ebitMargin: number; interest: number }
+  interface Cfg { rf: number; companies: Co[]; hy: number; ig: number }
 
   function merton(V: number, D: number, s: number, T: number, r: number) {
     const sT = s * Math.sqrt(T);
@@ -63,20 +153,70 @@ const { id, title = 'Merton model: equity as a call on assets', note } = Astro.p
     return { d1, d2, E, B, y, spread: y - r, pd, rec, delta: normCdf(d1) };
   }
 
+  /** Same solver as the frontmatter: V and sigma_A from observed E, sigma_E, D. */
+  function calibrate(E: number, sE: number, D: number, T: number, r: number) {
+    let sA = (sE * E) / (E + D);
+    let V = E + D * Math.exp(-r * T);
+    for (let it = 0; it < 200; it++) {
+      const eq = (v: number) => merton(v, D, sA, T, r).E - E;
+      let lo = E, hi = E + D * Math.exp(-r * T) + 1e-9;
+      for (let k = 0; k < 100; k++) {
+        const mid = 0.5 * (lo + hi);
+        if (eq(mid) > 0) hi = mid; else lo = mid;
+      }
+      V = 0.5 * (lo + hi);
+      const next = (sE * E) / (merton(V, D, sA, T, r).delta * V);
+      const done = Math.abs(next - sA) < 1e-7;
+      sA = 0.5 * sA + 0.5 * next;
+      if (done) break;
+    }
+    return { V, sA };
+  }
+
+  const B = (x: number) => `$${x.toFixed(x < 10 ? 2 : x < 100 ? 1 : 0)}B`;
+
   function init(root: HTMLElement) {
+    const cfg: Cfg = JSON.parse(root.querySelector('[data-cfg]')!.textContent!);
     const q = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
     const o = (k: string) => root.querySelector<HTMLElement>(`[data-o="${k}"]`)!;
     const out = (k: string) => root.querySelector<HTMLElement>(`[data-out="${k}"]`)!;
     const svg = root.querySelector<SVGSVGElement>('svg.sp')!;
+    const sel = root.querySelector<HTMLSelectElement>('[data-in="company"]')!;
+    const current = () => cfg.companies.find((c) => c.ticker === sel.value) ?? cfg.companies[0];
+
+    const setRange = (k: string, x: number, lo: number, hi: number) => {
+      const inp = q(k);
+      inp.min = String(+(x * lo).toPrecision(3)); inp.max = String(+(x * hi).toPrecision(3)); inp.step = String(+((x * (hi - lo)) / 400).toPrecision(2));
+    };
+
+    const load = () => {
+      const c = current();
+      setRange('v', c.V, 0.2, 2); setRange('d', c.D, 0.1, 2.5);
+      q('d').value = String(c.D); q('v').value = String(c.V); q('s').value = String(c.sA);
+      q('t').value = '5'; q('r').value = String(cfg.rf);
+    };
+
+    const recal = () => {
+      const c = current();
+      const D = +q('d').value, T = +q('t').value, r = +q('r').value;
+      const cal = calibrate(c.E, c.sE, D, T, r);
+      setRange('v', cal.V, 0.2, 2);
+      q('v').value = String(cal.V); q('s').value = String(cal.sA);
+    };
 
     const update = () => {
+      const c = current();
       const V = +q('v').value, D = +q('d').value, s = +q('s').value, T = +q('t').value, r = +q('r').value, mu = +q('mu').value;
-      o('v').textContent = `$${V.toLocaleString()}M`; o('d').textContent = `$${D.toLocaleString()}M`; o('s').textContent = fmt.pct(s, 0);
+      o('v').textContent = B(V); o('d').textContent = B(D); o('s').textContent = fmt.pct(s, 1);
       o('t').textContent = `${T.toFixed(2)} yrs`; o('r').textContent = fmt.pct(r, 2); o('mu').textContent = fmt.pct(mu, 1);
 
       const m = merton(V, D, s, T, r);
-      out('e').textContent = `$${m.E.toFixed(1)}M`;
-      out('b').textContent = `$${m.B.toFixed(1)}M (${fmt.pct(m.B / D, 1)} of face)`;
+      const seModel = (m.delta * V * s) / m.E;
+      out('calrow').innerHTML = `<th>${c.name}</th><td>${B(c.E)}</td><td>${fmt.pct(c.sE, 1)}</td><td>${B(D)}</td><td>${B(V)}</td><td>${fmt.pct(s, 1)}</td><td>${(D / V).toFixed(2)}</td><td>${fmt.pct(seModel, 1)} vs ${fmt.pct(c.sE, 1)} observed</td>`;
+      const vsHy = m.spread * 1e4 - cfg.hy * 100, vsIg = m.spread * 1e4 - cfg.ig * 100;
+      out('cmp').innerHTML = `Model spread <strong>${fmt.bp(m.spread)}</strong> at T = ${T.toFixed(2)} vs ICE BofA US High Yield OAS <strong>${(cfg.hy * 100).toFixed(0)} bp</strong> (${vsHy >= 0 ? '+' : '−'}${Math.abs(vsHy).toFixed(0)}) and IG corporate OAS <strong>${(cfg.ig * 100).toFixed(0)} bp</strong> (${vsIg >= 0 ? '+' : '−'}${Math.abs(vsIg).toFixed(0)}). Short horizons understate term-debt spreads; drag T toward the average maturity of the debt. TTM interest expense ${B(c.interest)}, EBIT margin ${fmt.pct(c.ebitMargin, 1)}.`;
+      out('e').textContent = B(m.E);
+      out('b').textContent = `${B(m.B)} (${fmt.pct(m.B / D, 1)} of face)`;
       const cs = out('cs');
       cs.textContent = fmt.bp(m.spread);
       cs.className = 'v ' + (m.spread > 0.03 ? 'neg' : '');
@@ -87,7 +227,7 @@ const { id, title = 'Merton model: equity as a call on assets', note } = Astro.p
       out('rec').textContent = fmt.pct(Math.min(1, m.rec), 1);
       out('lev').textContent = ((D * Math.exp(-r * T)) / V).toFixed(2);
       out('delta').textContent = m.delta.toFixed(3);
-      out('se').textContent = fmt.pct((m.delta * V * s) / m.E, 0);
+      out('se').textContent = fmt.pct(seModel, 1);
 
       clear(svg);
       const box = { left: 56, right: 700, top: 14, bottom: 210 };
@@ -101,10 +241,15 @@ const { id, title = 'Merton model: equity as a call on assets', note } = Astro.p
       curves.forEach((cv, i) => svg.appendChild(el('path', { d: path(levs.map((l, k) => [sx(l), sy(cv[k])])), fill: 'none', stroke: `var(--c${i + 1})`, 'stroke-width': 2.5 })));
       const myLev = (D * Math.exp(-r * T)) / V;
       if (myLev >= 0.1 && myLev <= 1.5) svg.appendChild(el('circle', { cx: sx(myLev), cy: sy(Math.min(0.2, m.spread)), r: 6, fill: 'var(--text)' }));
-      svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 242, class: 'lbl muted', 'text-anchor': 'middle' }, 'leverage: PV of debt ÷ asset value'));
-      void normPdf;
+      svg.appendChild(el('text', { x: (box.left + box.right) / 2, y: 242, class: 'lbl muted', 'text-anchor': 'middle' }, `leverage: PV of debt ÷ asset value (${c.ticker} marked)`));
     };
-    ['v', 'd', 's', 't', 'r', 'mu'].forEach((k) => q(k).addEventListener('input', update));
+
+    const cal = q('cal');
+    ['d', 't', 'r'].forEach((k) => q(k).addEventListener('input', () => { if (cal.checked) recal(); update(); }));
+    ['v', 's', 'mu'].forEach((k) => q(k).addEventListener('input', update));
+    cal.addEventListener('change', () => { if (cal.checked) recal(); update(); });
+    sel.addEventListener('change', () => { load(); update(); });
+    load();
     update();
   }
 

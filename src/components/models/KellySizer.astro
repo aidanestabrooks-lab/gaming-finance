@@ -3,7 +3,14 @@
  * Kelly criterion for a binary contract priced at m paying $1. If your
  * probability p exceeds m, buy YES with fraction f* = (p - m) / (1 - m);
  * if p < m, buy NO with f* = (m - p) / m. Plots expected log growth vs. fraction.
+ * Defaults come from the data snapshot: the market price is Kalshi's YES ask on
+ * the "Hike 25 bp" outcome of the next Fed decision and the belief is
+ * Polymarket's mid on the same outcome, so the default edge is the actual
+ * disagreement between the two venues.
  */
+import { fedOutcomes, kalshi, polymarket } from '../../lib/data';
+import DataNote from './DataNote.astro';
+
 interface Props {
   id: string;
   title?: string;
@@ -12,22 +19,37 @@ interface Props {
   belief?: number;
   bankroll?: number;
 }
-const { id, title = 'Kelly sizing for a non-arbitrage edge', note, price = 40, belief = 50, bankroll = 10000 } = Astro.props;
+const { id, title = 'Kelly sizing: your belief vs the market', note, price, belief, bankroll = 10000 } = Astro.props;
+
+const fo = fedOutcomes();
+const oc = fo.outcomes.find((o) => o.key === 'hike25' && o.kalshi && o.poly) ?? fo.outcomes.find((o) => o.kalshi && o.poly);
+const clamp = (x: number) => Math.min(99, Math.max(1, Math.round(x)));
+const kAsk = oc?.kalshi?.yes_ask ?? null;
+const kBid = oc?.kalshi?.yes_bid ?? null;
+const pBid = oc?.poly?.bestBid != null ? oc.poly.bestBid * 100 : null;
+const pAsk = oc?.poly?.bestAsk != null ? oc.poly.bestAsk * 100 : null;
+const pMid = pBid != null && pAsk != null ? (pBid + pAsk) / 2 : null;
+const useData = price == null && belief == null && oc != null;
+const dPrice = price ?? clamp(kAsk ?? 40);
+const dBelief = belief ?? clamp(pMid ?? 50);
+const quoteLine = useData
+  ? `${fo.event} · ${oc!.label}. Kalshi YES ${kBid ?? '–'}¢ bid / ${kAsk ?? '–'}¢ ask; Polymarket YES ${pBid?.toFixed(1) ?? '–'}¢ bid / ${pAsk?.toFixed(1) ?? '–'}¢ ask (mid ${pMid?.toFixed(1) ?? '–'}¢).`
+  : null;
 ---
 
 <div class="model" data-model="kelly" id={id}>
   <div class="model-head">
     <p class="model-title">{title}</p>
-    {note && <p class="model-note">{note}</p>}
+    {(note || quoteLine) && <p class="model-note">{note ?? quoteLine}</p>}
   </div>
   <div class="controls">
     <label class="ctl">
-      <span class="lab"><span>Market price of YES (m)</span><output data-o="m">{price}¢</output></span>
-      <input type="range" min="1" max="99" value={price} data-in="m" />
+      <span class="lab"><span>Market price of YES (m)</span><output data-o="m">{dPrice}¢</output></span>
+      <input type="range" min="1" max="99" value={dPrice} data-in="m" />
     </label>
     <label class="ctl">
-      <span class="lab"><span>Your probability (p)</span><output data-o="p">{belief}%</output></span>
-      <input type="range" min="1" max="99" value={belief} data-in="p" />
+      <span class="lab"><span>Your probability (p)</span><output data-o="p">{dBelief}%</output></span>
+      <input type="range" min="1" max="99" value={dBelief} data-in="p" />
     </label>
     <label class="ctl">
       <span class="lab"><span>Bankroll</span><output data-o="b">${bankroll}</output></span>
@@ -56,6 +78,17 @@ const { id, title = 'Kelly sizing for a non-arbitrage edge', note, price = 40, b
       </div>
     </div>
   </div>
+  {
+    useData && (
+      <DataNote
+        sources={[
+          { name: 'Kalshi market data API', asOf: kalshi.fetched, url: 'https://kalshi.com' },
+          { name: 'Polymarket Gamma API', asOf: polymarket.fetched, url: 'https://polymarket.com' },
+        ]}
+        note="Default m is Kalshi's YES ask and default p is Polymarket's mid on the same outcome. Build-time snapshot refreshed daily, not a live feed."
+      />
+    )
+  }
 </div>
 
 <script>
@@ -93,7 +126,6 @@ const { id, title = 'Kelly sizing for a non-arbitrage edge', note, price = 40, b
       clear(svg);
       const box = { left: 46, right: 350, top: 12, bottom: 196 };
       const fMax = Math.min(1, Math.max(0.3, fStar * 1.6 + 0.05));
-      const gs: number[] = [];
       const pts: [number, number][] = [];
       const gMax = fStar > 0 ? g(fStar) : 0.01;
       const gMin = Math.min(-gMax * 1.5, g(Math.min(0.99, fMax)));
@@ -105,9 +137,7 @@ const { id, title = 'Kelly sizing for a non-arbitrage edge', note, price = 40, b
       for (let i = 0; i <= 120; i++) {
         const ff = (i / 120) * fMax;
         if (ff >= 1) break;
-        const gv = g(ff);
-        gs.push(gv);
-        pts.push([sx(ff), sy(Math.max(gMin, gv))]);
+        pts.push([sx(ff), sy(Math.max(gMin, g(ff)))]);
       }
       svg.appendChild(el('line', { x1: box.left, x2: box.right, y1: sy(0), y2: sy(0), stroke: 'var(--muted)', 'stroke-dasharray': '3 3' }));
       svg.appendChild(el('path', { d: path(pts), fill: 'none', stroke: 'var(--c1)', 'stroke-width': 2.5 }));

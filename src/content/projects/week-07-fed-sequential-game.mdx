@@ -1,67 +1,119 @@
 ---
-title: "The Fed Moves First: Backward Induction on the Cutting Cycle"
+title: "The Fed Moves First: Backward Induction on the Next Decision"
 date: 2026-09-11
 week: 7
 tags: [Game Theory, Markets]
-summary: "The Fed sets the rate, the data arrive, the market positions. That is a sequential game with a chance node in the middle, and it is solved from the end backward. The tree below rolls back three scenarios for inflation risk and shows when a bigger cut is the equilibrium and when it is a trap."
+summary: "The Fed sets the rate, the data arrive, the market positions. That is a sequential game with a chance node in the middle, and it is solved from the end backward. The tree below is anchored to the current inflation prints and to what Kalshi and Polymarket are pricing for the next FOMC meeting, and it shows which move is the equilibrium under each view of the data."
 takeaways:
   - "Solve sequential games from the last move backward. The first mover's best choice depends on how every later player will respond, including Nature."
-  - "A chance node turns the market's payoff into an expectation. Small changes in the probability of re-accelerating inflation can flip the Fed's equilibrium move from 50 to 25."
-  - "The market's dominant strategy under most scenarios is to extend duration after the first cut. The Fed knows that, and it is part of why it cuts cautiously."
+  - "A chance node turns the market's payoff into an expectation. The probability that inflation re-accelerates is the one number that flips the Fed's equilibrium move between hiking, holding and cutting."
+  - "Prediction-market prices on the decision are a second estimate of that same probability. When the tree solved on the data disagrees with the tree solved on the market's odds, one of the two is mispricing inflation risk."
   - "Backward induction assumes everyone is rational and everyone knows the tree. The mispricings come when the market thinks the Fed is playing a different tree."
 sources:
   - title: "Federal Reserve: FOMC statements and projections"
     url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
+  - title: "FRED: core PCE price index (PCEPILFE), CPI (CPIAUCSL), 10-year breakeven (T10YIE), target range (DFEDTARU)"
+    url: https://fred.stlouisfed.org/series/PCEPILFE
+  - title: "Kalshi: Fed decision event contracts"
+    url: https://kalshi.com/
+  - title: "Polymarket: Fed decision markets"
+    url: https://polymarket.com/
   - title: "Selten, R. (1965). Spieltheoretische Behandlung eines Oligopolmodells (subgame perfection)"
     url: https://www.jstor.org/stable/40748884
 ---
 import GameTree from '../../components/models/GameTree.astro';
-
-export const fed = (p) => ({
-  player: 'Fed',
-  actions: [
-    { label: 'Cut 50', node: { player: 'Nature', actions: [
-      { label: 'Inflation re-accelerates', prob: p, node: { player: 'Market', actions: [
-        { label: 'Extend duration', node: { payoffs: [-4, -3] } },
-        { label: 'Stay short', node: { payoffs: [-3, 1] } } ] } },
-      { label: 'Inflation contained', prob: +(1 - p).toFixed(2), node: { player: 'Market', actions: [
-        { label: 'Extend duration', node: { payoffs: [3, 4] } },
-        { label: 'Stay short', node: { payoffs: [2, 0] } } ] } } ] } },
-    { label: 'Cut 25', node: { player: 'Nature', actions: [
-      { label: 'Inflation re-accelerates', prob: +(p * 0.6).toFixed(2), node: { player: 'Market', actions: [
-        { label: 'Extend duration', node: { payoffs: [-1, -1] } },
-        { label: 'Stay short', node: { payoffs: [0, 1] } } ] } },
-      { label: 'Inflation contained', prob: +(1 - p * 0.6).toFixed(2), node: { player: 'Market', actions: [
-        { label: 'Extend duration', node: { payoffs: [2, 2] } },
-        { label: 'Stay short', node: { payoffs: [1, 0] } } ] } } ] } },
-    { label: 'Hold', node: { player: 'Nature', actions: [
-      { label: 'Labor market cracks', prob: +(0.5 - p * 0.5).toFixed(2), node: { player: 'Market', actions: [
-        { label: 'Extend duration', node: { payoffs: [-3, 2] } },
-        { label: 'Stay short', node: { payoffs: [-2, -1] } } ] } },
-      { label: 'Soft landing holds', prob: +(0.5 + p * 0.5).toFixed(2), node: { player: 'Market', actions: [
-        { label: 'Extend duration', node: { payoffs: [1, 1] } },
-        { label: 'Stay short', node: { payoffs: [1, 0] } } ] } } ] } },
-  ],
-});
-
+import { fred, fedOutcomes, kalshi, polymarket, shortDate } from '../../lib/data';
+import { solve } from '../../lib/tree';
+export const core = fred.yoy('PCEPILFE');
+export const cpi = fred.yoy('CPIAUCSL');
+export const be = fred.latest('T10YIE');
+export const unrate = fred.latest('UNRATE');
+export const lo = fred.latest('DFEDTARL');
+export const hi = fred.latest('DFEDTARU');
+export const clamp = (x) => Math.min(0.95, Math.max(0.05, x));
+export const r2 = (x) => Math.round(x * 100) / 100;
+// Data-anchored probability that inflation re-accelerates over the next quarter.
+// p = 0.10 + 0.20 x (core PCE YoY - 2) + 0.10 x (CPI YoY - core PCE YoY) + 0.10 x (10y breakeven - 2.2), clamped to [0.05, 0.95].
+export const pData = clamp(0.1 + 0.2 * (core.value - 2) + 0.1 * (cpi.value - core.value) + 0.1 * (be - 2.2));
+// Market-implied: each venue's outcome probabilities, read as the crowd's view of where the committee sits.
+export const fo = fedOutcomes();
+export const venue = (pick) => {
+  const q = Object.fromEntries(fo.outcomes.map((o) => [o.key, pick(o)]));
+  const tot = Object.values(q).reduce((a, b) => a + (b ?? 0), 0) || 1;
+  const n = (k) => (q[k] ?? 0) / tot;
+  return { hike: n('hike25') + n('hike50'), hold: n('hold'), cut: n('cut25') + n('cut50') };
+};
+export const kal = venue((o) => (o.kalshi?.yes_bid != null && o.kalshi?.yes_ask != null ? (o.kalshi.yes_bid + o.kalshi.yes_ask) / 200 : null));
+export const pol = venue((o) => (o.poly?.bestBid != null && o.poly?.bestAsk != null ? (o.poly.bestBid + o.poly.bestAsk) / 2 : null));
+// A venue that prices hikes is pricing a committee that sees re-acceleration risk; a venue that prices cuts is not.
+export const pMarket = (v) => clamp(0.75 * v.hike + 0.3 * v.hold + 0.1 * v.cut);
+// Conditional on the Fed's move, the re-acceleration probability shifts: a hike leans against it, a cut feeds it.
+export const fed = (p) => {
+  const q = (x) => r2(clamp(x));
+  const nature = (pp, bad, good) => ({
+    player: 'Nature',
+    actions: [
+      { label: 'Inflation re-accelerates', prob: q(pp), node: { player: 'Market', actions: [
+        { label: 'Extend duration', node: { payoffs: bad[0] } },
+        { label: 'Stay short', node: { payoffs: bad[1] } } ] } },
+      { label: 'Inflation contained', prob: r2(1 - q(pp)), node: { player: 'Market', actions: [
+        { label: 'Extend duration', node: { payoffs: good[0] } },
+        { label: 'Stay short', node: { payoffs: good[1] } } ] } },
+    ],
+  });
+  return {
+    player: 'Fed',
+    actions: [
+      { label: 'Hike 25', node: nature(0.6 * p, [[1, -2], [1, 1]], [[-1, 3], [-1, 0]]) },
+      { label: 'Hold', node: nature(p, [[-3, -3], [-3, 1]], [[2, 2], [2, 0]]) },
+      { label: 'Cut 25', node: nature(1.4 * p, [[-5, -4], [-5, 1]], [[3, 4], [2, 0]]) },
+    ],
+  };
+};
+export const pct = (x) => `${Math.round(x * 100)}%`;
 export const scenarios = [
-  { name: 'Baseline (p = 0.25)', tree: fed(0.25) },
-  { name: 'Sticky inflation (p = 0.50)', tree: fed(0.5) },
-  { name: 'Labor cracking (p = 0.10)', tree: fed(0.1) },
+  { name: `Data-anchored (p = ${pData.toFixed(2)})`, tree: fed(pData) },
+  { name: `Market-implied, Kalshi (p = ${pMarket(kal).toFixed(2)})`, tree: fed(pMarket(kal)) },
+  { name: `Market-implied, Polymarket (p = ${pMarket(pol).toFixed(2)})`, tree: fed(pMarket(pol)) },
 ];
+export const eq = scenarios.map((s) => { const r = solve(s.tree, ['Fed', 'Market']); return s.tree.actions[r.choice].label; });
 
 ## The setup
 
-Three players. The **Fed** moves first and chooses the size of a cut. **Nature** then draws the next quarter's data: inflation either re-accelerates (probability $p$) or stays contained. The **market** moves last and decides whether to extend duration or stay short. Payoffs are (Fed, Market) in arbitrary welfare units.
+Three players. The **Fed** moves first and chooses among the three moves actually on the table at a meeting: hike 25 basis points, hold, or cut 25. **Nature** then draws the next quarter's data: inflation either re-accelerates (probability $p$, conditional on the move) or stays contained. The **market** moves last and decides whether to extend duration or stay short. Payoffs are (Fed, Market) in welfare units.
 
-The Fed's payoff rewards getting the economy to a soft landing and punishes a policy error in either direction. The market's payoff is its mark-to-market: long duration pays when inflation is contained and the Fed keeps easing, and bleeds when inflation returns.
+The Fed's payoff rewards getting the economy to a soft landing and punishes a policy error in either direction: a cut into re-accelerating inflation is the worst outcome, a hike into contained inflation is a smaller, growth-cost error. The market's payoff is its mark-to-market: long duration pays when inflation is contained and bleeds when it returns.
+
+Where the game starts matters. The target range is {lo.toFixed(2)}–{hi.toFixed(2)}%. Core PCE inflation is running at {core.value.toFixed(2)}% year over year ({shortDate(core.asOf)}), headline CPI at {cpi.value.toFixed(2)}% ({shortDate(cpi.asOf)}), the 10-year breakeven at {be.toFixed(2)}%, and unemployment at {unrate.toFixed(1)}%.
 
 <GameTree
   id="fed"
   players={['Fed', 'Market']}
   scenarios={scenarios}
-  note="Payoffs (Fed, Market). Click a scenario to re-solve. Hover a node for its rollback value."
+  note="Payoffs (Fed, Market). Click a scenario to re-solve. Hover a node for its rollback value. Branch probabilities are rounded to two decimals."
 />
+
+## Where the probabilities come from
+
+The chance node is the whole game, so its probability should come from somewhere you can argue with. Three scenarios, three sources.
+
+**Data-anchored.** A linear read of the inflation prints, clamped to $[0.05, 0.95]$:
+
+$$
+p = 0.10 + 0.20\,(\pi^{\text{core}} - 2) + 0.10\,(\pi^{\text{CPI}} - \pi^{\text{core}}) + 0.10\,(\text{BE}_{10} - 2.2)
+$$
+
+Each point of core PCE above target adds 20 points of re-acceleration risk, a headline–core gap adds 10 points per point (energy and food feeding through), and a 10-year breakeven above its 2.2% post-2021 norm adds 10 points per point. With today's prints that gives $p = {pData.toFixed(2)}$.
+
+**Market-implied.** Kalshi and Polymarket quote the five outcomes of the next decision. Normalizing each venue's mids, Kalshi puts {pct(kal.hike)} on a hike, {pct(kal.hold)} on a hold and {pct(kal.cut)} on a cut; Polymarket puts {pct(pol.hike)}, {pct(pol.hold)} and {pct(pol.cut)}. The committee's expected move reveals its own read of inflation risk, so the venue-implied $p$ is a weighted average of regime risks:
+
+$$
+p_{\text{mkt}} = 0.75\,P(\text{hike}) + 0.30\,P(\text{hold}) + 0.10\,P(\text{cut})
+$$
+
+A committee that hikes is one that sees re-acceleration as likely; one that cuts does not. That gives $p = {pMarket(kal).toFixed(2)}$ from Kalshi and $p = {pMarket(pol).toFixed(2)}$ from Polymarket.
+
+**Conditional on the move.** Inside the tree, the Fed's own action shifts the odds: after a hike the re-acceleration probability is $0.6p$, after a hold it is $p$, after a cut it is $1.4p$. Policy is not a bet on the weather; it changes the weather.
 
 ## How backward induction works
 
@@ -77,10 +129,12 @@ with the market's optimal response already substituted in at each branch. The Fe
 
 ## Reading the three scenarios
 
-In the baseline, the larger cut rolls back to a higher Fed payoff because the contained-inflation branch is likely enough that its payoff dominates. Switch to "sticky inflation": the probability on the bad branch doubles, the expected value of the 50 cut collapses, and the equilibrium drops to 25. Switch to "labor cracking": holding becomes dangerous because the probability that the labor market breaks under a hold rises, and 50 is back.
+Solved at build time on the current numbers, the equilibrium Fed move is **{eq[0]}** in the data-anchored scenario, **{eq[1]}** under Kalshi's implied odds and **{eq[2]}** under Polymarket's. For comparison, the venues themselves price the most likely move at {pct(Math.max(kal.hike, kal.hold, kal.cut))} (Kalshi) and {pct(Math.max(pol.hike, pol.hold, pol.cut))} (Polymarket).
 
-Notice the market's choice almost never changes. Under most branches, extending duration after a cut is the market's best response. The Fed knows this. A large cut followed by a duration rally is baked into the tree, which is part of why the Fed treats the size of the first cut as a signal and not merely a rate.
+Read the disagreement, if there is one, as information. When the data-anchored tree and the market-implied tree pick the same move, the market is pricing the inflation risk that the prints show. When they differ, either the formula above is missing something the market knows (a labor-market crack, a committee's stated bias), or the market is pricing a different tree from the one the Fed is playing. The second case is the trade.
+
+Notice that the market's choice rarely changes across scenarios. Under most branches, extending duration after a cut and staying short after a hike is the market's best response. The Fed knows that, which is part of why the size and direction of a move is treated as a signal and not merely a rate.
 
 ## What this means for investors
 
-Your edge is not in the terminal payoffs, which everyone roughly agrees on. It is in $p$. The probability of re-acceleration is the one number that flips the equilibrium, and it moves with every inflation print. Position for the *equilibrium path under your* $p$, and compare it with the path the market is pricing. When they differ, you have a trade with a reason.
+Your edge is not in the terminal payoffs, which everyone roughly agrees on. It is in $p$. The probability of re-acceleration is the one number that flips the equilibrium, and it moves with every inflation print. Position for the *equilibrium path under your* $p$, compare it with the path the market is pricing on Kalshi and Polymarket, and when they differ you have a trade with a reason. The quotes used here were taken {shortDate(kalshi.fetched)} and are refreshed with each daily rebuild; the odds on the exchanges move intraday.

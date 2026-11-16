@@ -14,24 +14,37 @@ sources:
     url: https://www.cfainstitute.org/insights/professional-learning/refresher-readings/liability-driven-index-based-strategies
   - title: "Milliman: Pension Funding Index"
     url: https://www.milliman.com/en/products/pension-funding-index
+  - title: "FRED: Treasury constant-maturity yields (DGS1–DGS30), Board of Governors H.15"
+    url: https://fred.stlouisfed.org/series/DGS30
 ---
 import Immunization from '../../components/models/Immunization.astro';
+import { parYield, curveAsOf, shortDate } from '../../lib/data';
+
+export const asOf = shortDate(curveAsOf());
+export const y2 = parYield(2).toFixed(2);
+export const y10 = parYield(10).toFixed(2);
+export const y30 = parYield(30).toFixed(2);
+export const longSlope = (100 * (parYield(30) - parYield(2))).toFixed(0);
 
 ## The setup
 
 A defined-benefit plan must pay a fixed annual benefit starting in a few years and continuing for a couple of decades. The sponsor wants to hold a bond portfolio such that, whatever rates do, assets stay ahead of liabilities. The sponsor has two candidate portfolios of the same present value and the same duration: a **bullet**, one bond maturing near the liability's duration, and a **barbell**, a short bond and a long bond mixed to the same duration.
 
-<Immunization id="ldi" note="Annual coupons, flat curve at the chosen yield, par bonds. Twists pivot at the liability's duration. $ millions." />
+The discount curve is not a textbook flat yield. It is the Treasury par curve of {asOf}, interpolated to every integer year and bootstrapped to spot rates: {y2}% at two years, {y10}% at ten, {y30}% at thirty, a two-to-thirty slope of {longSlope} basis points. The liability schedule is a stylized pension; everything it is discounted with is observed.
+
+<Immunization id="ldi" />
 
 ## The immunization conditions
 
-With a flat yield $y$, the liability stream $L_t$ has present value, Macaulay duration, and convexity
+Discounting each cash flow at its own spot rate $s_t$, the liability stream $L_t$ has present value, Macaulay duration, and convexity
 
 $$
-PV_L = \sum_t \frac{L_t}{(1+y)^t}, \qquad
-D_L = \frac{1}{PV_L}\sum_t \frac{t\,L_t}{(1+y)^t}, \qquad
-C_L = \frac{1}{PV_L(1+y)^2}\sum_t \frac{t(t+1)\,L_t}{(1+y)^t}
+PV_L = \sum_t \frac{L_t}{(1+s_t)^t}, \qquad
+D_L = \frac{1}{PV_L}\sum_t \frac{t\,L_t}{(1+s_t)^t}, \qquad
+C_L = \frac{1}{PV_L}\sum_t \frac{t(t+1)\,L_t}{(1+s_t)^{t+2}}
 $$
+
+The spot rates come from the standard bootstrap of the par curve: the $m$-year par bond prices at 100 when its coupons are discounted at the spots already solved for shorter maturities, which pins down the $m$-year discount factor. Because today's curve is {longSlope} basis points steeper at thirty years than at two, long cash flows are discounted harder than a flat-curve model would discount them, and the bullet and barbell that match the liability's duration are not the ones a flat curve would pick.
 
 Classical immunization sets asset $PV$ and $D$ equal to the liability's and asset convexity above it. The barbell weights are solved from two equations (value match, duration match) in two unknowns. The bullet is the single par bond whose duration is nearest the liability's. Both satisfy the first two conditions. The "convexity gap" box shows that only the barbell satisfies the third with room to spare.
 
@@ -41,7 +54,7 @@ Drag the parallel-shift slider with the twist at zero. The right-hand chart show
 
 ## Twists
 
-Now set the parallel shift to zero and drag the twist. The twist steepens or flattens the curve around the liability's duration: short yields move one way, long yields the other. The left-hand chart shows surplus against the twist. The bullet barely moves, because its single cash flow sits at the pivot. The barbell swings hard, because half its value is at the short end and half at the long end, exactly where the twist bites. A steepener of 50 basis points per decade of maturity can wipe out a surplus the barbell had earned from years of carry.
+Now set the parallel shift to zero and drag the twist. The twist steepens or flattens today's spot curve around the liability's duration: short yields move one way, long yields the other. The left-hand chart shows surplus against the twist. The bullet barely moves, because its single cash flow sits at the pivot. The barbell swings hard, because half its value is at the short end and half at the long end, exactly where the twist bites. A steepener of 50 basis points per decade of maturity can wipe out a surplus the barbell had earned from years of carry.
 
 This is **structural risk**: the exposure of a duration-matched portfolio to changes in the shape of the curve. The Level III reading's remedy is to minimize the dispersion of asset cash flows around the liability's, which, taken to the limit, is cash-flow matching. Convexity and dispersion are two sides of one coin; you cannot buy the first without the second.
 

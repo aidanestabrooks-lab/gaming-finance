@@ -511,3 +511,33 @@ pre {
     padding: 1rem;
   }
 }
+
+/* Provenance line under a model: sources and as-of dates for its default inputs. */
+.model-data {
+  margin: 1rem 0 0;
+  padding-top: 0.7rem;
+  border-top: 1px dashed var(--line);
+  font-family: var(--sans);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.model-data-k {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-right: 0.6rem;
+}
+.model-data a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+}
+.model-data a:hover {
+  color: var(--text);
+}
+.model-data-note {
+  display: block;
+  margin-top: 0.25rem;
+}

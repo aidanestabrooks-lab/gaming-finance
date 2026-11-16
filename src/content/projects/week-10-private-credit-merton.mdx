@@ -3,7 +3,7 @@ title: "Private Credit Through the Merton Lens"
 date: 2026-10-02
 week: 10
 tags: [CFA, Firms]
-summary: "Equity is a call option on the firm's assets struck at the face value of its debt. That one idea gives you a default probability, a credit spread, and an explanation of why levered borrowers take more risk when things go wrong. The model below is the Level II structural credit model, live, with the spread-versus-leverage curve that private credit lenders are pricing against."
+summary: "Equity is a call option on the firm's assets struck at the face value of its debt. That one idea gives you a default probability, a credit spread, and an explanation of why levered borrowers take more risk when things go wrong. The model below is the Level II structural credit model calibrated to listed issuers from their market capitalization, realized equity volatility and reported debt, with the model spread set against the live high-yield and investment-grade index spreads."
 takeaways:
   - "In the Merton model, the credit spread is a function of just three things: leverage, asset volatility, and time. Everything else is a label."
   - "Equity delta is the shareholders' incentive to add risk. As leverage rises and delta falls below one, equity holders gain from volatility that debt holders pay for. That is asset substitution, and covenants exist because of it."
@@ -16,12 +16,23 @@ sources:
     url: https://www.jstor.org/stable/2978814
   - title: "Federal Reserve: Financial Stability Report"
     url: https://www.federalreserve.gov/publications/financial-stability-report.htm
+  - title: "FRED: ICE BofA US High Yield OAS (BAMLH0A0HYM2) and US Corporate OAS (BAMLC0A0CM)"
+    url: https://fred.stlouisfed.org/series/BAMLH0A0HYM2
+  - title: "Company 10-K and 10-Q filings via SEC EDGAR (total debt as reported)"
+    url: https://www.sec.gov/edgar/search/
 ---
 import MertonModel from '../../components/models/MertonModel.astro';
+import { companies, companySnapshot, fred, shortDate } from '../../lib/data';
+
+export const levered = companies.levered.map((c) => companySnapshot(c));
+export const pct = (x, d = 1) => `${(100 * x).toFixed(d)}%`;
+export const bn = (x) => `$${(x / 1e9).toFixed(x < 10e9 ? 2 : x < 100e9 ? 1 : 0)}B`;
+export const hy = fred.latest('BAMLH0A0HYM2');
+export const ig = fred.latest('BAMLC0A0CM');
 
 ## The setup
 
-A middle-market company has assets worth $V$ and owes a single zero-coupon debt of face $D$ due at $T$. At maturity, shareholders pay the debt if $V_T > D$ and keep $V_T - D$; otherwise they walk away and the lenders take the assets. Shareholders therefore hold a call on $V$ with strike $D$:
+A company has assets worth $V$ and owes a single zero-coupon debt of face $D$ due at $T$. At maturity, shareholders pay the debt if $V_T > D$ and keep $V_T - D$; otherwise they walk away and the lenders take the assets. Shareholders therefore hold a call on $V$ with strike $D$:
 
 $$
 E = V\,N(d_1) - D e^{-rT} N(d_2), \qquad
@@ -30,11 +41,37 @@ $$
 
 The debt is worth $V - E$. Its yield is $y = -\ln(B/D)/T$, and the credit spread is $y - r$. The risk-neutral probability of default is $N(-d_2)$.
 
-<MertonModel id="merton" note="Illustrative middle-market borrower. $ millions. The curve chart holds T and r fixed at the slider values." />
+Neither $V$ nor $\sigma_A$ is observable. What you can observe for a listed company is the market value of equity $E$, the volatility of its stock $\sigma_E$, and the debt on its balance sheet. The model solves the two equations
+
+$$
+E = V\,N(d_1) - D e^{-rT} N(d_2), \qquad \sigma_E\,E = N(d_1)\,\sigma_A\,V
+$$
+
+for the two unknowns, which is exactly the procedure the Level II reading describes and the one commercial distance-to-default models run every day. The companies below are public issuers with meaningful leverage; private credit borrowers are the same kind of balance sheet without the stock price.
+
+<MertonModel id="merton" company="CHTR" />
+
+## The borrowers
+
+<div class="table-wide">
+<table>
+  <thead><tr><th>Company</th><th>Market cap E</th><th>Equity vol σ<sub>E</sub> (1-yr)</th><th>Total debt D</th><th>D / (E + D)</th><th>TTM EBIT margin</th><th>TTM interest expense</th></tr></thead>
+  <tbody>
+    {levered.map((s) => (
+      <tr>
+        <td>{s.name} ({s.ticker})</td><td>{bn(s.marketCap)}</td><td>{pct(s.equityVol1y)}</td><td>{bn(s.totalDebt)}</td>
+        <td>{pct(s.totalDebt / (s.marketCap + s.totalDebt))}</td><td>{pct(s.ebitMargin)}</td><td>{bn(s.interestExpenseTTM)}</td>
+      </tr>
+    ))}
+  </tbody>
+</table>
+</div>
+
+Equity volatility is the annualized standard deviation of the last 252 daily log returns. Debt is total debt as reported, treated as one zero-coupon claim at face; real capital structures have coupons, maturities spread over years, and leases, which is why the horizon slider matters. At one year almost every spread rounds to zero, because a year is not long enough for asset volatility to carry even a levered firm below its debt. At five years, closer to the average maturity of term debt, the differences between these issuers open up. For reference, the ICE BofA US High Yield index OAS was {hy.toFixed(0)} bp and the investment-grade index OAS {ig.toFixed(0)} bp on {shortDate(fred.asOf('BAMLH0A0HYM2'))}; the model reports its spread against both.
 
 ## Reading the outputs
 
-**Spread versus leverage.** The three curves plot the implied spread against the ratio of the present value of debt to asset value, for asset volatilities of 15%, 25% and 40%. Two things stand out. First, the curves are convex: spread is nearly flat at low leverage and explodes past a threshold. Second, the volatility curves are far apart. At the same leverage, a borrower whose assets are twice as volatile can carry several times the spread. Private credit underwriting that focuses on leverage multiples and ignores asset volatility is reading the wrong axis.
+**Spread versus leverage.** The three curves plot the implied spread against the ratio of the present value of debt to asset value, for asset volatilities of 15%, 25% and 40%. Two things stand out. First, the curves are convex: spread is nearly flat at low leverage and explodes past a threshold. Second, the volatility curves are far apart. At the same leverage, a borrower whose assets are twice as volatile can carry several times the spread. Private credit underwriting that focuses on leverage multiples and ignores asset volatility is reading the wrong axis. The dot marks the selected company, so you can see which curve it lives on.
 
 **Distance to default.** The risk-neutral $d_2$ discounts at the risk-free rate because it is built for pricing. For forecasting defaults you want the real-world version, which replaces $r$ with the expected asset return $\mu$:
 
@@ -44,9 +81,9 @@ $$
 
 The model shows both. The real-world default probability is lower than the risk-neutral one whenever $\mu > r$, which is the normal case, and the gap is the credit risk premium.
 
-**Equity delta.** $\partial E/\partial V = N(d_1)$. At low leverage delta is near one: shareholders own the assets in all but name. As leverage rises, delta falls, and shareholders become option holders. Option holders like volatility. That is why a distressed borrower's management will take the long-shot acquisition or the risky pivot: equity gains from the upside, debt absorbs the downside. Covenants, collateral, and lender step-in rights are the mechanism design that pushes back.
+**Equity delta.** $\partial E/\partial V = N(d_1)$. At low leverage delta is near one: shareholders own the assets in all but name. As leverage rises, delta falls, and shareholders become option holders. Option holders like volatility. That is why a distressed borrower's management will take the long-shot acquisition or the risky pivot: equity gains from the upside, debt absorbs the downside. Covenants, collateral, and lender step-in rights are the mechanism design that pushes back. Switch between the hyperscalers and the levered names and watch delta move.
 
-**Equity volatility.** The identity $\sigma_E = N(d_1)\,V\sigma_A / E$ links the unobservable asset volatility to the observable equity volatility. In practice, that is how $V$ and $\sigma_A$ are backed out from a listed company's stock. For a private borrower you do not have $\sigma_E$, which is one reason private credit marks are smoother than they should be.
+**Equity volatility.** The identity $\sigma_E = N(d_1)\,V\sigma_A / E$ links the unobservable asset volatility to the observable equity volatility. The calibration row checks it: the model's $\sigma_E$ at the solved $V$ and $\sigma_A$ should reproduce the observed figure. Untick the calibration box and the sliders come free, so you can ask what the spread would be if the same balance sheet carried different asset risk. For a private borrower you do not have $\sigma_E$ at all, which is one reason private credit marks are smoother than they should be.
 
 ## The game inside the model
 
@@ -54,4 +91,4 @@ Lender and borrower are playing a game the Merton model makes explicit. The borr
 
 ## What this means for investors
 
-If you hold private credit through a fund, the questions to ask are the model's inputs: what is the asset volatility of the borrowers, not just their leverage; how far is the typical borrower from the point where the spread curve goes vertical; and what mechanisms stop a distressed borrower from doing what option holders rationally do. The spread you are paid is only generous relative to the right answers.
+If you hold private credit through a fund, the questions to ask are the model's inputs: what is the asset volatility of the borrowers, not just their leverage; how far is the typical borrower from the point where the spread curve goes vertical; and what mechanisms stop a distressed borrower from doing what option holders rationally do. The spread you are paid is only generous relative to the right answers. The public issuers on this page are the yardstick: their equity prices tell you what the market thinks their assets are worth and how much they move, and the model turns that into the spread a lender should demand. A private loan to a similar balance sheet at a lower spread is not a bargain for the lender.
